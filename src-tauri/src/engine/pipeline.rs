@@ -1,12 +1,82 @@
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
-use image::{codecs::jpeg::JpegEncoder, codecs::png::PngEncoder, imageops::FilterType, ImageReader};
+use image::{
+    codecs::jpeg::JpegEncoder, 
+    codecs::png::PngEncoder, 
+    codecs::bmp::BmpEncoder, 
+    codecs::ico::IcoEncoder,
+    codecs::tiff::TiffEncoder,
+    codecs::tga::TgaEncoder,
+    imageops::FilterType, 
+    DynamicImage, ImageReader, ImageBuffer, Rgba
+};
 use webp::Encoder as WebpEncoder;
 
 use crate::engine::resize::apply_resize;
 use crate::errors::EngineError;
 use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, OutputFormat};
+
+/// Universal Image Decoder
+pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> {
+    let ext = input_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // 1. Process Vector SVG
+    if ext == "svg" {
+        let svg_data = std::fs::read(input_path)?;
+        let opt = usvg::Options::default();
+        let tree = usvg::Tree::from_data(&svg_data, &opt)
+            .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
+
+        let pixmap_size = tree.size().to_int_size();
+        let mut pixmap = resvg::tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())
+            .ok_or_else(|| EngineError::DecodeFailed("Failed to allocate SVG pixmap".into()))?;
+
+        resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+
+        let rgba_buf = ImageBuffer::<Rgba<u8>, _>::from_raw(
+            pixmap.width(),
+            pixmap.height(),
+            pixmap.data().to_vec(),
+        ).ok_or_else(|| EngineError::DecodeFailed("Failed to create RGBA buffer from SVG".into()))?;
+
+        return Ok(DynamicImage::ImageRgba8(rgba_buf));
+    }
+
+    // 2. Process RAW formats (ARW, CR2, NEF, DNG, RAF, RW2...)
+    let raw_extensions = ["arw", "cr2", "crw", "dng", "nef", "orf", "pef", "raf", "rw2", "sr2", "srf"];
+    if raw_extensions.contains(&ext.as_str()) {
+        if let Ok(raw_image) = rawloader::decode_file(input_path) {
+            let width = raw_image.width as u32;
+            let height = raw_image.height as u32;
+
+            if let rawloader::RawImageData::Integer(data) = raw_image.data {
+                // convert 16-bit raw CFA to 8-bit RGB preview
+                let mut rgb_buf = Vec::with_capacity((width * height * 3) as usize);
+                for pixel in data.iter().take((width * height) as usize) {
+                    let val = (*pixel >> 6).min(255) as u8;
+                    rgb_buf.push(val);
+                    rgb_buf.push(val);
+                    rgb_buf.push(val);
+                }
+                if let Some(img_buf) = ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, rgb_buf) {
+                    return Ok(DynamicImage::ImageRgb8(img_buf));
+                }
+            }
+        }
+    }
+
+    // 3. Handle standard raster formats via the `image` crate (JPG, PNG, WebP, BMP, TIFF, TGA, GIF, ICO, PNM, EXR...)
+    let reader = ImageReader::open(input_path)?
+        .with_guessed_format()
+        .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
+
+    reader.decode().map_err(|e| EngineError::DecodeFailed(e.to_string()))
+}
 
 pub fn process_single_image(
     input_path_str: &str,
@@ -17,12 +87,7 @@ pub fn process_single_image(
         return Err(EngineError::FileNotFound(input_path_str.to_string()));
     }
 
-    let img = ImageReader::open(input_path)?
-        .with_guessed_format()
-        .map_err(|e| EngineError::DecodeFailed(e.to_string()))?
-        .decode()
-        .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
-
+    let img = decode_any_image(input_path)?;
     let processed_img = apply_resize(img, options);
 
     let parent_dir = if let Some(ref dir) = options.output_directory {
@@ -44,22 +109,39 @@ pub fn process_single_image(
         OutputFormat::Jpeg => "jpg",
         OutputFormat::Png => "png",
         OutputFormat::Webp => "webp",
+        OutputFormat::Avif => "avif",
+        OutputFormat::Bmp => "bmp",
+        OutputFormat::Ico => "ico",
+        OutputFormat::Icns => "icns",
+        OutputFormat::Tiff => "tif",
+        OutputFormat::Tga => "tga",
+        OutputFormat::Gif => "gif",
+        OutputFormat::Exr => "exr",
+        OutputFormat::Pbm => "pbm",
+        OutputFormat::Pdf => "pdf",
+        OutputFormat::Psd => "psd",
+        OutputFormat::Dds => "dds",
+        OutputFormat::Jp2 => "jp2",
+        OutputFormat::Ktx => "ktx",
+        OutputFormat::Pvr => "pvr",
+        OutputFormat::Astc => "astc",
     };
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
 
+    // Encoder Pipeline
     match options.format {
         OutputFormat::Jpeg => {
-            let output_file = File::create(&output_path)?;
-            let writer = BufWriter::new(output_file);
-            let mut encoder = JpegEncoder::new_with_quality(writer, options.quality.clamp(1, 100));
-            encoder
-                .encode_image(&processed_img)
+            let file = File::create(&output_path)?;
+            let writer = BufWriter::new(file);
+            let encoder = JpegEncoder::new_with_quality(writer, options.quality.clamp(1, 100));
+            processed_img
+                .write_with_encoder(encoder)
                 .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
         }
         OutputFormat::Png => {
-            let output_file = File::create(&output_path)?;
-            let writer = BufWriter::new(output_file);
+            let file = File::create(&output_path)?;
+            let writer = BufWriter::new(file);
             let encoder = PngEncoder::new(writer);
             processed_img
                 .write_with_encoder(encoder)
@@ -71,6 +153,48 @@ pub fn process_single_image(
             let encoder = WebpEncoder::from_rgba(&rgba, w, h);
             let memory = encoder.encode(options.quality as f32);
             std::fs::write(&output_path, &*memory)
+                .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        OutputFormat::Bmp => {
+            let file = File::create(&output_path)?;
+            let mut writer = BufWriter::new(file);
+            let encoder = BmpEncoder::new(&mut writer);
+            processed_img
+                .write_with_encoder(encoder)
+                .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        OutputFormat::Ico => {
+            let file = File::create(&output_path)?;
+            let writer = BufWriter::new(file);
+            let encoder = IcoEncoder::new(writer);
+            let ico_img = if processed_img.width() > 256 || processed_img.height() > 256 {
+                processed_img.resize(256, 256, FilterType::Lanczos3)
+            } else {
+                processed_img.clone()
+            };
+            ico_img
+                .write_with_encoder(encoder)
+                .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        OutputFormat::Tiff => {
+            let file = File::create(&output_path)?;
+            let writer = BufWriter::new(file);
+            let encoder = TiffEncoder::new(writer);
+            processed_img
+                .write_with_encoder(encoder)
+                .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        OutputFormat::Tga => {
+            let file = File::create(&output_path)?;
+            let writer = BufWriter::new(file);
+            let encoder = TgaEncoder::new(writer);
+            processed_img
+                .write_with_encoder(encoder)
+                .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        _ => {
+            processed_img
+                .save(&output_path)
                 .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
         }
     }
@@ -91,22 +215,19 @@ pub fn get_image_metadata(input_path_str: &str) -> Result<ImageMetadata, EngineE
     }
 
     let file_size = std::fs::metadata(path)?.len();
+    let format_name = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("IMG")
+        .to_uppercase();
 
-    let reader = ImageReader::open(path)?
-        .with_guessed_format()
-        .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
-
-    let img = reader
-        .decode()
-        .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
-
+    let img = decode_any_image(path)?;
     let (w, h) = (img.width(), img.height());
 
-    // Dùng FilterType::Nearest để downscale cực nhanh thumbnail
     let thumb = img.resize(96, 96, FilterType::Nearest);
     let thumb_rgba = thumb.to_rgba8();
     let (tw, th) = thumb_rgba.dimensions();
-    
+
     let encoder = WebpEncoder::from_rgba(&thumb_rgba, tw, th);
     let webp_data = encoder.encode(30.0);
 
@@ -120,5 +241,6 @@ pub fn get_image_metadata(input_path_str: &str) -> Result<ImageMetadata, EngineE
         height: h,
         size: file_size,
         thumbnail_base64,
+        format_name,
     })
 }

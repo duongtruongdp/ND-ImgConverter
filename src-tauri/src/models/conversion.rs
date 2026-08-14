@@ -1,11 +1,27 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     Jpeg,
     Png,
     Webp,
+    Avif,
+    Bmp,
+    Ico,
+    Icns,
+    Tiff,
+    Tga,
+    Gif,
+    Exr,
+    Pbm,
+    Pdf,
+    Psd,
+    Dds,
+    Jp2,
+    Ktx,
+    Pvr,
+    Astc,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -56,4 +72,5 @@ pub struct ImageMetadata {
     pub height: u32,
     pub size: u64,
     pub thumbnail_base64: String,
+    pub format_name: String,
 }

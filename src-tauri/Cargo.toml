@@ -1,21 +1,13 @@
 [package]
 name = "nd-image-converter"
-version = "0.2.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.3.0"
+description = "Fast offline batch image converter"
+authors = ["duongtruongdp"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "nd_image_converter_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -24,8 +16,29 @@ tauri-plugin-fs = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 rayon = "1.10"
 tokio = { version = "1", features = ["sync"] }
 webp = "0.3"
 base64 = "0.22"
+
+image = { version = "0.25", features = [
+    "jpeg", 
+    "png", 
+    "webp", 
+    "bmp", 
+    "ico", 
+    "tiff", 
+    "tga", 
+    "gif", 
+    "exr", 
+    "pnm", 
+    "qoi",
+    "avif"
+] }
+
+resvg = "0.45"
+usvg = "0.45"
+rawloader = "0.37"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

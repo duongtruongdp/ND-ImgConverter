@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -7,23 +7,24 @@ import {
   Upload, 
   Trash2, 
   Play, 
-  Square,
+  Square, 
   Loader2, 
   CheckCircle2, 
   AlertCircle, 
-  Image as ImageIcon,
-  Plus,
-  Sparkles,
-  FolderOpen,
-  ExternalLink,
-  ArrowRight,
-  Eye,
-  Sliders
+  Image as ImageIcon, 
+  Plus, 
+  Sparkles, 
+  FolderOpen, 
+  ExternalLink, 
+  ArrowRight, 
+  Eye, 
+  Sliders,
+  ChevronDown
 } from 'lucide-react';
 import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
 import { ComparisonModal } from './components/comparison/ComparisonModal';
-import { ImageItem, OutputFormat, ResizeMode } from './types/conversion';
+import { ImageItem, OutputFormat, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
   filePath: string;
@@ -50,12 +51,24 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [selectedComparisonItem, setSelectedComparisonItem] = useState<ImageItem | null>(null);
+  const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
+  const formatMenuRef = useRef<HTMLDivElement>(null);
+
+  // Đóng format menu khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) {
+        setIsFormatMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const processIncomingFiles = useCallback(async (paths: string[]) => {
-    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
     const filtered = paths.filter((p) => {
       const ext = p.split('.').pop()?.toLowerCase();
-      return ext && validExtensions.includes(ext);
+      return ext && SUPPORTED_INPUT_EXTENSIONS.includes(ext);
     });
 
     const newFiles: ImageItem[] = filtered.map((p) => ({
@@ -95,7 +108,11 @@ export default function App() {
     try {
       const selected = await open({
         multiple: true,
-        filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+        filters: [
+          { name: 'All Supported Formats', extensions: SUPPORTED_INPUT_EXTENSIONS },
+          { name: 'Standard Formats', extensions: ['jpg', 'jpeg', 'png', 'webp', 'svg', 'gif', 'bmp', 'ico', 'tiff'] },
+          { name: 'Camera RAW', extensions: ['arw', 'cr2', 'crw', 'dng', 'nef', 'orf', 'pef', 'raf', 'rw2'] }
+        ],
       });
       if (selected) {
         const paths = Array.isArray(selected) ? selected : [selected];
@@ -135,7 +152,6 @@ export default function App() {
     }
   }, [files, isConverting, settings, updateFileStatus]);
 
-  // Global Keyboard Shortcuts (Cmd+O, Cmd+Enter, Cmd+Backspace)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -224,31 +240,31 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0d0f12] text-zinc-200 select-none font-sans antialiased overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
       {/* Header */}
       <header
         data-tauri-drag-region
-        className="h-12 pl-20 pr-5 border-b border-zinc-800/80 flex items-center justify-between bg-[#121418]/60 backdrop-blur-md z-10 shrink-0"
+        className="h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-10 shrink-0"
       >
         <div data-tauri-drag-region className="flex items-center gap-2 pointer-events-none">
           <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.2</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.3</span>
         </div>
 
         {/* Presets Bar */}
-        <div className="flex items-center gap-1.5 bg-zinc-900/60 p-1 rounded-lg border border-zinc-800/80">
-          <Sliders className="w-3 h-3 text-zinc-400 ml-1.5 mr-0.5" />
+        <div className="flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80">
+          <Sliders className="w-3 h-3 text-zinc-500 ml-1.5 mr-1" />
           {DEFAULT_PRESETS.map((p) => (
             <button
               key={p.id}
               onClick={() => settings.applyPreset(p)}
-              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition cursor-pointer ${
+              className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 settings.activePresetId === p.id
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
               }`}
             >
               {p.name}
@@ -257,18 +273,18 @@ export default function App() {
         </div>
 
         {files.length > 0 && !isConverting && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleSelectFiles}
-              className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
+              className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#181c24] hover:bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
             >
               <Plus className="w-3 h-3" /> Add more
             </button>
             <button
               onClick={clearFiles}
-              className="text-[11px] font-medium px-2 py-1 rounded-md text-zinc-400 hover:text-red-400 flex items-center gap-1 transition cursor-pointer"
+              className="text-[11px] font-medium px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 flex items-center gap-1 transition cursor-pointer"
             >
-              <Trash2 className="w-3 h-3" /> Clear
+              <Trash2 className="w-3 h-3" />
             </button>
           </div>
         )}
@@ -279,20 +295,22 @@ export default function App() {
         {files.length === 0 ? (
           <div
             onClick={handleSelectFiles}
-            className={`flex-1 rounded-2xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center cursor-pointer ${
+            className={`flex-1 rounded-3xl border border-dashed transition-all duration-300 flex flex-col items-center justify-center cursor-pointer ${
               isDragging
                 ? 'border-blue-500 bg-blue-500/10 scale-[0.99]'
-                : 'border-zinc-800 hover:border-zinc-700 bg-[#121418]/40 hover:bg-[#121418]/70'
+                : 'border-zinc-800/80 hover:border-zinc-700 bg-[#111317]/50 hover:bg-[#111317]/80'
             }`}
           >
-            <div className="p-4 rounded-2xl bg-zinc-800/80 border border-zinc-700/50 mb-4 shadow-xl text-blue-400">
+            <div className="p-4 rounded-2xl bg-[#181b22] border border-zinc-700/40 mb-4 shadow-2xl text-blue-400">
               <Upload className="w-8 h-8 stroke-[1.75]" />
             </div>
-            <h2 className="text-sm font-medium text-zinc-200 mb-1">Drop images anywhere here</h2>
-            <p className="text-xs text-zinc-500 mb-4">or click to browse from your computer (⌘O)</p>
-            <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-500 bg-zinc-900/80 px-2.5 py-1 rounded-full border border-zinc-800">
-              JPG • PNG • WebP
-            </span>
+            <h2 className="text-sm font-medium text-zinc-200 mb-1">Drop images or camera RAW files here</h2>
+            <p className="text-xs text-zinc-500 mb-4">or click to browse from computer (⌘O)</p>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-400 bg-[#161920] px-3 py-1.5 rounded-full border border-zinc-800">
+                50+ INPUT FORMATS • 19+ OUTPUT FORMATS
+              </span>
+            </div>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto pr-1 space-y-2">
@@ -305,19 +323,17 @@ export default function App() {
               return (
                 <div
                   key={file.id}
-                  className="group flex items-center justify-between p-2.5 rounded-xl bg-[#14171d] border border-zinc-800/80 hover:border-zinc-700/80 transition shadow-sm"
+                  className="group flex items-center justify-between p-2.5 rounded-2xl bg-[#12141a] border border-zinc-850 hover:border-zinc-750 transition-all shadow-sm"
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
-                    {/* Thumbnail */}
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800/80 border border-zinc-700/40 flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden">
                       {file.thumbnail ? (
                         <img src={file.thumbnail} alt={file.name} className="w-full h-full object-cover" />
                       ) : (
-                        <ImageIcon className="w-4 h-4 text-zinc-400" />
+                        <ImageIcon className="w-4 h-4 text-zinc-500" />
                       )}
                     </div>
 
-                    {/* Info */}
                     <div className="flex flex-col truncate">
                       <span className="text-xs font-medium text-zinc-200 truncate">{file.name}</span>
                       <div className="flex items-center gap-2 text-[10px] text-zinc-500">
@@ -340,34 +356,30 @@ export default function App() {
 
                   <div className="flex items-center gap-2.5">
                     {file.status === 'queued' && (
-                      <span className="text-[10px] text-zinc-400 bg-zinc-800/60 px-2 py-0.5 rounded border border-zinc-700/40">Ready</span>
+                      <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-0.5 rounded-md border border-zinc-700/40">Ready</span>
                     )}
                     {file.status === 'processing' && (
-                      <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 flex items-center gap-1">
+                      <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 flex items-center gap-1">
                         <Loader2 className="w-3 h-3 animate-spin" /> Processing
                       </span>
                     )}
                     {file.status === 'completed' && (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                        <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Done
                         </span>
-
-                        {/* Nút Xem So Sánh Chi Tiết */}
                         <button
                           onClick={() => setSelectedComparisonItem(file)}
                           title="Compare Before / After"
-                          className="text-zinc-400 hover:text-blue-400 p-1 hover:bg-zinc-800 rounded transition cursor-pointer"
+                          className="text-zinc-400 hover:text-blue-400 p-1.5 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-
-                        {/* Nút Reveal trong Finder */}
                         {file.outputPath && (
                           <button
                             onClick={() => handleReveal(file.outputPath!)}
-                            title="Show in Finder / Explorer"
-                            className="text-zinc-400 hover:text-zinc-200 p-1 hover:bg-zinc-800 rounded transition cursor-pointer"
+                            title="Show in Finder"
+                            className="text-zinc-400 hover:text-zinc-200 p-1.5 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </button>
@@ -375,7 +387,7 @@ export default function App() {
                       </div>
                     )}
                     {file.status === 'failed' && (
-                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 flex items-center gap-1" title={file.errorMessage}>
+                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 flex items-center gap-1" title={file.errorMessage}>
                         <AlertCircle className="w-3 h-3" /> Error
                       </span>
                     )}
@@ -383,7 +395,7 @@ export default function App() {
                     {!isConverting && (
                       <button
                         onClick={() => removeFile(file.id)}
-                        className="text-zinc-500 hover:text-red-400 p-1 transition cursor-pointer"
+                        className="text-zinc-500 hover:text-red-400 p-1.5 transition cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -396,69 +408,99 @@ export default function App() {
         )}
       </main>
 
-      {/* Realtime Progress Bar */}
+      {/* Progress Bar */}
       {isConverting && (
-        <div className="w-full bg-zinc-800 h-1 relative overflow-hidden">
+        <div className="w-full bg-zinc-900 h-1 relative overflow-hidden">
           <div
-            className="bg-blue-500 h-full transition-all duration-200"
+            className="bg-blue-500 h-full transition-all duration-200 shadow-[0_0_8px_rgba(59,130,246,0.8)]"
             style={{ width: `${(progress.completed / (progress.total || 1)) * 100}%` }}
           />
         </div>
       )}
 
-      {/* Bottom Controls Bar */}
-      <footer className="p-4 bg-[#121418] border-t border-zinc-800/80 flex items-center justify-between gap-4 z-10 shrink-0">
-        <div className="flex items-center gap-5 flex-wrap">
-          {/* Format */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-zinc-400">Format</span>
-            <select
-              value={settings.format}
-              onChange={(e) => settings.setFormat(e.target.value as OutputFormat)}
-              className="bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer"
+      {/* Modern Minimalist Bottom Controls */}
+      <footer className="p-3.5 bg-[#101216]/95 border-t border-zinc-800/80 flex items-center justify-between gap-4 z-20 shrink-0">
+        <div className="flex items-center gap-3 flex-wrap">
+          
+          {/* Format Pill Popover Trigger */}
+          <div className="relative" ref={formatMenuRef}>
+            <button
+              onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}
+              className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
             >
-              <option value="webp">WebP</option>
-              <option value="jpeg">JPEG</option>
-              <option value="png">PNG</option>
-            </select>
+              <span className="text-zinc-400 font-normal">Format</span>
+              <span className="font-semibold text-blue-400 uppercase tracking-wider">{settings.format}</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${isFormatMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* 20 Output Formats Grid Modal */}
+            {isFormatMenuOpen && (
+              <div className="absolute bottom-11 left-0 w-[420px] bg-[#12151b] border border-zinc-800 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-800/80 px-1">
+                  <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Select Output Format</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">19 Formats</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                  {ALL_OUTPUT_FORMATS.map((item) => (
+                    <button
+                      key={item.value}
+                      onClick={() => {
+                        settings.setFormat(item.value);
+                        setIsFormatMenuOpen(false);
+                      }}
+                      className={`h-8 rounded-xl text-[11px] font-medium transition-all flex items-center justify-center cursor-pointer border ${
+                        settings.format === item.value
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30'
+                          : 'bg-[#181b22] border-zinc-800/80 text-zinc-300 hover:bg-[#202530] hover:border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Quality */}
-          {settings.format !== 'png' && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-medium text-zinc-400">Quality</span>
+          {/* Quality Slider Pill */}
+          {(settings.format === 'webp' || settings.format === 'jpeg' || settings.format === 'avif') && (
+            <div className="h-8 px-3 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-2.5 shadow-sm">
+              <span className="text-xs text-zinc-400">Quality</span>
               <input
                 type="range"
                 min="1"
                 max="100"
                 value={settings.quality}
                 onChange={(e) => settings.setQuality(Number(e.target.value))}
-                className="w-20 accent-blue-500 cursor-pointer"
+                className="w-16 accent-blue-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
               />
-              <span className="text-xs font-mono text-zinc-300 w-6">{settings.quality}%</span>
+              <span className="text-xs font-mono font-medium text-zinc-300 w-7">{settings.quality}%</span>
             </div>
           )}
 
-          {/* Resize */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-zinc-400">Resize</span>
-            <select
-              value={settings.resizeMode}
-              onChange={(e) => settings.setResizeMode(e.target.value as ResizeMode)}
-              className="bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer"
-            >
-              <option value="original">Original</option>
-              <option value="width">Width (px)</option>
-              <option value="percentage">Percent (%)</option>
-            </select>
+          {/* Resize Segmented Pill */}
+          <div className="h-8 p-0.5 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-0.5 shadow-sm">
+            {(['original', 'width', 'percentage'] as ResizeMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => settings.setResizeMode(mode)}
+                className={`h-7 px-2.5 rounded-lg text-[11px] font-medium capitalize transition cursor-pointer ${
+                  settings.resizeMode === mode
+                    ? 'bg-[#252a36] text-white border border-zinc-700/60 shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {mode === 'original' ? 'Original' : mode === 'width' ? 'Width' : 'Scale %'}
+              </button>
+            ))}
 
             {settings.resizeMode === 'width' && (
               <input
                 type="number"
                 value={settings.targetWidth || ''}
                 onChange={(e) => settings.setTargetWidth(Number(e.target.value))}
-                placeholder="Width px"
-                className="w-20 bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2 py-1.5 outline-none focus:border-blue-500 font-mono"
+                placeholder="px"
+                className="w-16 h-7 ml-1 bg-[#101216] border border-zinc-700/80 text-zinc-200 text-xs rounded-lg px-2 outline-none focus:border-blue-500 font-mono"
               />
             )}
 
@@ -467,35 +509,35 @@ export default function App() {
                 type="number"
                 value={settings.scalePercentage || ''}
                 onChange={(e) => settings.setScalePercentage(Number(e.target.value))}
-                placeholder="Scale %"
-                className="w-16 bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2 py-1.5 outline-none focus:border-blue-500 font-mono"
+                placeholder="%"
+                className="w-14 h-7 ml-1 bg-[#101216] border border-zinc-700/80 text-zinc-200 text-xs rounded-lg px-2 outline-none focus:border-blue-500 font-mono"
               />
             )}
           </div>
 
-          {/* Output Folder Selector */}
+          {/* Output Folder Selector Pill */}
           <button
             onClick={handleSelectOutputFolder}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+            className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
             title={settings.outputDirectory ? `Output: ${settings.outputDirectory}` : 'Same folder as source'}
           >
             <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
-            <span className="max-w-[100px] truncate">
-              {settings.outputDirectory ? settings.outputDirectory.split('/').pop() : 'Default Output'}
+            <span className="max-w-[110px] truncate">
+              {settings.outputDirectory ? settings.outputDirectory.split('/').pop() : 'Source Dir'}
             </span>
           </button>
         </div>
 
         {/* Action Button */}
         <div className="flex items-center gap-3">
-          <span className="text-[11px] text-zinc-500">
-            {isConverting ? `${progress.completed}/${progress.total}` : `${files.length} files`}
+          <span className="text-[11px] text-zinc-400 font-mono">
+            {isConverting ? `${progress.completed}/${progress.total}` : `${files.length} items`}
           </span>
 
           {isConverting ? (
             <button
               onClick={handleCancel}
-              className="bg-red-600/80 hover:bg-red-600 text-white font-medium text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+              className="h-8 px-4 bg-red-600/80 hover:bg-red-600 text-white font-medium text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
             >
               <Square className="w-3 h-3 fill-current" />
               <span>Cancel</span>
@@ -504,10 +546,10 @@ export default function App() {
             <button
               disabled={files.length === 0}
               onClick={handleStartBatch}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs px-5 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/20 transition cursor-pointer active:scale-95"
+              className="h-8 px-4.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Convert All (⌘↵)</span>
+              <Play className="w-3 h-3 fill-current" />
+              <span>Convert (⌘↵)</span>
             </button>
           )}
         </div>

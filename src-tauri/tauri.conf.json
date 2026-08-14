@@ -1,6 +1,6 @@
 {
   "productName": "ND Image Converter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "com.nd.imageconverter",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,7 +14,6 @@
         "title": "ND Image Converter",
         "width": 820,
         "height": 580,
-        "icon": "icons/128x128.png",
         "minWidth": 640,
         "minHeight": 450,
         "resizable": true,
