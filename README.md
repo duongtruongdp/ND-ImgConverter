@@ -55,3 +55,40 @@ Ensure you have the following installed on your machine:
 3. **Xcode Command Line Tools** (for macOS):
    ```bash
    xcode-select --install
+   ```
+
+## ✨ Installation & Development
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/duongtruongdp/ND-ImgConverter.git
+   cd ND-ImgConverter
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run in development mode:
+   ```bash
+   npm run tauri dev
+   ```
+
+## 📦 Building for Production
+To create an optimized production release (.dmg / .app on macOS, .msi / .exe on Windows):
+  ```bash
+  npm run tauri build
+  ```
+The output installation files will be available in:
+- **macOS:** src-tauri/target/release/bundle/dmg/
+- **Windows:** src-tauri/target/release/bundle/msi/
+
+## 🗺 Roadmap
+[x] v0.1: Core Engine, Batch Conversion (JPG/PNG/WebP), Fast Thumbnails, Native Drag & Drop.
+
+[ ] v0.2: Split-screen Before/After Image Comparison Slider, Presets Manager, Keyboard Shortcuts.
+
+[ ] v0.3: AVIF & HEIC/HEIF Format Support.
+
+[ ] v0.4: EXIF & Color Profile (ICC) Preservation Engine.
+
+## 📄 License
+This project is licensed under the MIT License - see the LICENSE file for details.
