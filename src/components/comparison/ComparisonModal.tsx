@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, MouseEvent, TouchEvent, WheelEvent } from 'react';
+import { useState, useRef, useEffect, MouseEvent, WheelEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { 
   X, 
@@ -7,9 +7,6 @@ import {
   Loader2, 
   ZoomIn, 
   ZoomOut, 
-  Maximize2, 
-  RotateCcw,
-  Camera,
   MapPinOff,
   Palette
 } from 'lucide-react';

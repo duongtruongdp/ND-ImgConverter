@@ -48,24 +48,7 @@ const formatBytes = (bytes: number) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-const calculateEstimatedSavings = (totalInputBytes: number, format: string, quality: number) => {
-  if (totalInputBytes === 0) return { estBytes: 0, percent: 0 };
 
-  let ratio = 0.5;
-  if (format === 'webp') {
-    ratio = 0.15 + (quality / 100) * 0.35;
-  } else if (format === 'avif') {
-    ratio = 0.10 + (quality / 100) * 0.30;
-  } else if (format === 'jpeg') {
-    ratio = 0.25 + (quality / 100) * 0.55;
-  } else if (format === 'png') {
-    ratio = 0.75;
-  }
-
-  const estBytes = Math.round(totalInputBytes * ratio);
-  const percent = Math.max(5, Math.round((1 - ratio) * 100));
-  return { estBytes, percent };
-};
 
 export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
