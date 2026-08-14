@@ -87,7 +87,7 @@ The output installation files will be available in:
 ## 🗺 Roadmap
 [x] v0.1: Core Engine, Batch Conversion (JPG/PNG/WebP), Fast Thumbnails, Native Drag & Drop.
 
-[ ] v0.2: Split-screen Before/After Image Comparison Slider, Presets Manager, Keyboard Shortcuts.
+[x] v0.2: Split-screen Before/After Image Comparison Slider, Presets Manager, Keyboard Shortcuts.
 
 [ ] v0.3: AVIF & HEIC/HEIF Format Support.
 
