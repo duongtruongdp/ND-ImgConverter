@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
+import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
 import { 
   Upload, 
   Trash2, 
@@ -522,33 +523,8 @@ export default function App() {
                 )}
               </div>
 
-              {/* Quality Slider Pill & Realtime Estimator */}
-              {(settings.format === 'webp' || settings.format === 'jpeg' || settings.format === 'avif') && (
-                <div className="h-8 px-3 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-2.5 shadow-sm">
-                  <span className="text-xs text-zinc-400">Quality</span>
-                  <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={settings.quality}
-                    onChange={(e) => settings.setQuality(Number(e.target.value))}
-                    className="w-16 accent-blue-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
-                  />
-                  <span className="text-xs font-mono font-medium text-zinc-300 w-7">{settings.quality}%</span>
-
-                  {files.length > 0 && (
-                    <div className="hidden lg:flex items-center gap-1.5 pl-2 border-l border-zinc-800 text-[10px] text-zinc-400">
-                      <span>Est:</span>
-                      <span className="text-emerald-400 font-mono font-semibold">
-                        ~{formatBytes(calculateEstimatedSavings(files.reduce((acc, f) => acc + (f.size || 0), 0), settings.format, settings.quality).estBytes)}
-                      </span>
-                      <span className="text-emerald-400/80 font-mono">
-                        (-{calculateEstimatedSavings(files.reduce((acc, f) => acc + (f.size || 0), 0), settings.format, settings.quality).percent}%)
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Quality Analyzer Pill (Realtime Size Estimator) */}
+              <QualityAnalyzerPill />
 
               {/* Resize Segmented Pill */}
               <div className="h-8 p-0.5 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-0.5 shadow-sm">

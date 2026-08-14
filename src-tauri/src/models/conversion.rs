@@ -105,7 +105,7 @@ pub struct ProgressPayload {
     pub total: usize,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageMetadata {
     pub path: String,

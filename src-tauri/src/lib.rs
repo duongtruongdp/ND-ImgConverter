@@ -7,15 +7,183 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use rayon::prelude::*;
 
-use crate::engine::metadata::extract_exif_info;
-use crate::engine::pipeline::{get_image_metadata, process_single_image};
+use crate::engine::pipeline::{
+    estimate_single_file_size, get_image_metadata, process_single_image,
+};
 use crate::engine::watcher::{start_folder_watcher, stop_folder_watcher, FolderWatcherState};
 use crate::errors::EngineError;
-use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, ProgressPayload};
+use crate::models::conversion::{
+    ConversionOptions, ImageMetadata, OutputFormat, ProgressPayload,
+};
 
 pub struct AppState {
     pub is_cancelled: Arc<AtomicBool>,
     pub watcher_state: FolderWatcherState,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchSizeEstimation {
+    pub total_original_bytes: u64,
+    pub total_estimated_bytes: u64,
+    pub savings_percentage: f64,
+    pub quality_tier: String,
+}
+
+#[tauri::command]
+fn calculate_quality_estimate(
+    items: Vec<ImageMetadata>,
+    format: OutputFormat,
+    quality: u8,
+) -> BatchSizeEstimation {
+    let mut total_orig: u64 = 0;
+    let mut total_est: u64 = 0;
+
+    for item in &items {
+        total_orig += item.size;
+        let est = estimate_single_file_size(item.size, item.width, item.height, &format, quality);
+        total_est += est;
+    }
+
+    let savings = if total_orig > 0 && total_est < total_orig {
+        ((total_orig - total_est) as f64 / total_orig as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let tier = match quality {
+        95..=100 => "Near Lossless",
+        80..=94 => "High Studio Quality",
+        65..=79 => "Web Balanced",
+        50..=64 => "Maximum Compression",
+        _ => "Aggressive Space Saver",
+    };
+
+    BatchSizeEstimation {
+        total_original_bytes: total_orig,
+        total_estimated_bytes: total_est,
+        savings_percentage: (savings * 10.0).round() / 10.0,
+        quality_tier: tier.to_string(),
+    }
+}
+
+#[tauri::command]
+async fn fetch_batch_metadata(paths: Vec<String>) -> Vec<Option<ImageMetadata>> {
+    paths
+        .into_par_iter()
+        .map(|p| get_image_metadata(&p).ok())
+        .collect()
+}
+
+#[tauri::command]
+async fn read_image_as_data_url(path: String) -> Result<String, String> {
+    let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+    use base64::Engine;
+    let base64_str = base64::engine::general_purpose::STANDARD.encode(&data);
+    
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("png")
+        .to_lowercase();
+
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "gif" => "image/gif",
+        _ => "image/png",
+    };
+
+    Ok(format!("data:{};base64,{}", mime, base64_str))
+}
+
+#[tauri::command]
+async fn reveal_in_finder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let p = std::path::Path::new(&path);
+        let dir = p.parent().unwrap_or(p);
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_batch_conversion(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    files: Vec<String>,
+    options: ConversionOptions,
+) -> Result<(), String> {
+    state.is_cancelled.store(false, Ordering::SeqCst);
+    let total = files.len();
+
+    let is_cancelled = state.is_cancelled.clone();
+    let completed_counter = std::sync::atomic::AtomicUsize::new(0);
+
+    files.into_par_iter().for_each(|file_path| {
+        if is_cancelled.load(Ordering::SeqCst) {
+            return;
+        }
+
+        let result = process_single_image(&file_path, &options);
+        let completed = completed_counter.fetch_add(1, Ordering::SeqCst) + 1;
+
+        let payload = match result {
+            Ok(res) => ProgressPayload {
+                file_path: file_path.clone(),
+                output_path: Some(res.output_path),
+                output_size: Some(res.output_size),
+                success: true,
+                error: None,
+                completed,
+                total,
+            },
+            Err(e) => ProgressPayload {
+                file_path: file_path.clone(),
+                output_path: None,
+                output_size: None,
+                success: false,
+                error: Some(e.to_string()),
+                completed,
+                total,
+            },
+        };
+
+        let _ = app.emit("conversion-progress", payload);
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn cancel_conversion(state: State<'_, AppState>) -> Result<(), String> {
+    state.is_cancelled.store(true, Ordering::SeqCst);
+    Ok(())
 }
 
 #[tauri::command]
@@ -34,84 +202,6 @@ async fn stop_watch_automation(state: State<'_, AppState>) -> Result<(), String>
     stop_folder_watcher(&state.watcher_state)
 }
 
-#[tauri::command]
-async fn cancel_conversion(state: State<'_, AppState>) -> Result<(), ()> {
-    state.is_cancelled.store(true, Ordering::SeqCst);
-    Ok(())
-}
-
-#[tauri::command]
-async fn fetch_batch_metadata(paths: Vec<String>) -> Result<Vec<Option<ImageMetadata>>, ()> {
-    let results = tokio::task::spawn_blocking(move || {
-        paths
-            .par_iter()
-            .map(|p| get_image_metadata(p).ok())
-            .collect::<Vec<Option<ImageMetadata>>>()
-    })
-    .await
-    .unwrap_or_default();
-
-    Ok(results)
-}
-
-#[tauri::command]
-fn reveal_in_finder(path: String) {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open").arg("-R").arg(&path).spawn();
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("explorer").arg(format!("/select,{}", path)).spawn();
-    }
-}
-
-#[tauri::command]
-async fn start_batch_conversion(
-    app_handle: tauri::AppHandle,
-    state: State<'_, AppState>,
-    files: Vec<String>,
-    options: ConversionOptions,
-) -> Result<(), EngineError> {
-    state.is_cancelled.store(false, Ordering::SeqCst);
-    let is_cancelled = Arc::clone(&state.is_cancelled);
-    let total = files.len();
-    let completed_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-    tokio::task::spawn_blocking(move || {
-        files.par_iter().for_each(|file_path| {
-            if is_cancelled.load(Ordering::SeqCst) {
-                return;
-            }
-
-            let result = process_single_image(file_path, &options);
-            let count = completed_counter.fetch_add(1, Ordering::SeqCst) + 1;
-
-            let (success, error, output_path, output_size) = match result {
-                Ok(res) => (true, None, Some(res.output_path), Some(res.output_size)),
-                Err(e) => (false, Some(e.to_string()), None, None),
-            };
-
-            let _ = app_handle.emit(
-                "conversion-progress",
-                ProgressPayload {
-                    file_path: file_path.clone(),
-                    output_path,
-                    output_size,
-                    success,
-                    error,
-                    completed: count,
-                    total,
-                },
-            );
-        });
-    })
-    .await
-    .map_err(|_| EngineError::Cancelled)?;
-
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -128,29 +218,9 @@ pub fn run() {
             start_batch_conversion,
             cancel_conversion,
             start_watch_automation,
-            stop_watch_automation
+            stop_watch_automation,
+            calculate_quality_estimate
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-#[tauri::command]
-async fn read_image_as_data_url(path: String) -> Result<String, EngineError> {
-    tokio::task::spawn_blocking(move || {
-        let p = std::path::Path::new(&path);
-        if !p.exists() {
-            return Err(EngineError::FileNotFound(path));
-        }
-        let bytes = std::fs::read(p)?;
-        let mime = match p.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase().as_str() {
-            "jpg" | "jpeg" => "image/jpeg",
-            "png" => "image/png",
-            "webp" => "image/webp",
-            _ => "application/octet-stream",
-        };
-        use base64::Engine;
-        let base64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
-        Ok(format!("data:{};base64,{}", mime, base64_str))
-    })
-    .await
-    .map_err(|_| EngineError::Cancelled)?
 }

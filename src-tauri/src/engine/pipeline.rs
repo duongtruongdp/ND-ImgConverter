@@ -19,6 +19,44 @@ use crate::engine::resize::apply_resize;
 use crate::errors::EngineError;
 use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, OutputFormat, TargetColorSpace};
 
+/// Ước tính kích thước nén nhanh dựa trên phân tích metadata
+pub fn estimate_single_file_size(
+    file_size: u64,
+    width: u32,
+    height: u32,
+    format: &OutputFormat,
+    quality: u8,
+) -> u64 {
+    if file_size == 0 {
+        return 0;
+    }
+
+    let q = quality.clamp(1, 100) as f64;
+    let pixels = (width * height) as f64;
+
+    match format {
+        OutputFormat::Webp => {
+            let bpp = 0.04 + (q / 100.0).powf(2.2) * 0.85;
+            let est_raw = ((pixels * bpp) / 8.0) as u64;
+            est_raw.min(file_size)
+        }
+        OutputFormat::Avif => {
+            let bpp = 0.025 + (q / 100.0).powf(2.4) * 0.65;
+            let est_raw = ((pixels * bpp) / 8.0) as u64;
+            est_raw.min(file_size)
+        }
+        OutputFormat::Jpeg => {
+            let bpp = 0.08 + (q / 100.0).powf(2.0) * 1.4;
+            let est_raw = ((pixels * bpp) / 8.0) as u64;
+            est_raw.min((file_size as f64 * 1.2) as u64)
+        }
+        OutputFormat::Png => ((pixels * 1.8) / 8.0) as u64,
+        OutputFormat::Bmp => (pixels * 3.0) as u64 + 54,
+        OutputFormat::Tiff => (pixels * 3.0) as u64 + 1024,
+        _ => (file_size as f64 * (0.4 + (q / 100.0) * 0.6)) as u64,
+    }
+}
+
 pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> {
     let ext = input_path
         .extension()
@@ -84,7 +122,7 @@ pub fn process_single_image(
         return Err(EngineError::FileNotFound(input_path_str.to_string()));
     }
 
-    // 1. Decode image
+    // 1. Decode ảnh
     let img = decode_any_image(input_path)?;
 
     // 2. Resize
@@ -94,7 +132,7 @@ pub fn process_single_image(
     let target_color_space = options.color_space.clone().unwrap_or(TargetColorSpace::Srgb);
     let processed_img = apply_color_transform(resized_img, &target_color_space, None);
 
-    // 4. Locate the output folder and file extension
+    // 4. Định vị thư mục & đuôi file xuất
     let parent_dir = if let Some(ref dir) = options.output_directory {
         if !dir.trim().is_empty() {
             PathBuf::from(dir)
@@ -134,7 +172,7 @@ pub fn process_single_image(
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
 
-    // 5. Encode according to the target format
+    // 5. Encode theo format đích
     match options.format {
         OutputFormat::Jpeg => {
             let file = File::create(&output_path)?;
