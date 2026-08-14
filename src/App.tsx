@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -16,10 +16,13 @@ import {
   Sparkles,
   FolderOpen,
   ExternalLink,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  Sliders
 } from 'lucide-react';
 import { useFileStore } from './stores/fileStore';
-import { useSettingsStore } from './stores/settingsStore';
+import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
+import { ComparisonModal } from './components/comparison/ComparisonModal';
 import { ImageItem, OutputFormat, ResizeMode } from './types/conversion';
 
 interface ProgressPayload {
@@ -46,9 +49,9 @@ export default function App() {
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const [selectedComparisonItem, setSelectedComparisonItem] = useState<ImageItem | null>(null);
 
-  // Xử lý nạp file và fetch thumbnail hàng loạt bằng đa luồng song song
-  const processIncomingFiles = async (paths: string[]) => {
+  const processIncomingFiles = useCallback(async (paths: string[]) => {
     const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
     const filtered = paths.filter((p) => {
       const ext = p.split('.').pop()?.toLowerCase();
@@ -86,54 +89,9 @@ export default function App() {
         console.error('Error fetching batch metadata:', err);
       }
     }
-  };
+  }, [addFiles, updateBatchFileInfo]);
 
-  // Drag & drop native OS
-  useEffect(() => {
-    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type === 'over' || event.payload.type === 'enter') {
-        setIsDragging(true);
-      } else if (event.payload.type === 'drop') {
-        setIsDragging(false);
-        processIncomingFiles(event.payload.paths);
-      } else if (event.payload.type === 'leave') {
-        setIsDragging(false);
-      }
-    });
-
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [addFiles]);
-
-  // Listen progress realtime from Rust
-  useEffect(() => {
-    const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
-      const { filePath, outputPath, outputSize, success, error, completed, total } = event.payload;
-      
-      setProgress({ completed, total });
-
-      const targetFile = files.find((f) => f.path === filePath);
-      if (targetFile) {
-        updateFileStatus(
-          targetFile.id,
-          success ? 'completed' : 'failed',
-          error,
-          outputPath && outputSize ? { path: outputPath, size: outputSize } : undefined
-        );
-      }
-
-      if (completed >= total) {
-        setIsConverting(false);
-      }
-    });
-
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [files, updateFileStatus]);
-
-  const handleSelectFiles = async () => {
+  const handleSelectFiles = useCallback(async () => {
     try {
       const selected = await open({
         multiple: true,
@@ -146,20 +104,9 @@ export default function App() {
     } catch (err) {
       console.error('Error opening dialog:', err);
     }
-  };
+  }, [processIncomingFiles]);
 
-  const handleSelectOutputFolder = async () => {
-    try {
-      const selected = await open({ directory: true, multiple: false });
-      if (selected && typeof selected === 'string') {
-        settings.setOutputDirectory(selected);
-      }
-    } catch (err) {
-      console.error('Error selecting directory:', err);
-    }
-  };
-
-  const handleStartBatch = async () => {
+  const handleStartBatch = useCallback(async () => {
     if (files.length === 0 || isConverting) return;
 
     files.forEach((f) => {
@@ -185,6 +132,77 @@ export default function App() {
     } catch (err) {
       console.error('Batch convert failed:', err);
       setIsConverting(false);
+    }
+  }, [files, isConverting, settings, updateFileStatus]);
+
+  // Global Keyboard Shortcuts (Cmd+O, Cmd+Enter, Cmd+Backspace)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (isCmdOrCtrl && e.key === 'o') {
+        e.preventDefault();
+        handleSelectFiles();
+      } else if (isCmdOrCtrl && e.key === 'Enter') {
+        e.preventDefault();
+        handleStartBatch();
+      } else if (isCmdOrCtrl && e.key === 'Backspace' && files.length > 0 && !isConverting) {
+        e.preventDefault();
+        clearFiles();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSelectFiles, handleStartBatch, files.length, isConverting, clearFiles]);
+
+  useEffect(() => {
+    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'over' || event.payload.type === 'enter') setIsDragging(true);
+      else if (event.payload.type === 'drop') {
+        setIsDragging(false);
+        processIncomingFiles(event.payload.paths);
+      } else if (event.payload.type === 'leave') {
+        setIsDragging(false);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [processIncomingFiles]);
+
+  useEffect(() => {
+    const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
+      const { filePath, outputPath, outputSize, success, error, completed, total } = event.payload;
+      setProgress({ completed, total });
+
+      const targetFile = files.find((f) => f.path === filePath);
+      if (targetFile) {
+        updateFileStatus(
+          targetFile.id,
+          success ? 'completed' : 'failed',
+          error,
+          outputPath && outputSize ? { path: outputPath, size: outputSize } : undefined
+        );
+      }
+
+      if (completed >= total) {
+        setIsConverting(false);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [files, updateFileStatus]);
+
+  const handleSelectOutputFolder = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (selected && typeof selected === 'string') {
+        settings.setOutputDirectory(selected);
+      }
+    } catch (err) {
+      console.error('Error selecting directory:', err);
     }
   };
 
@@ -217,6 +235,25 @@ export default function App() {
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.2</span>
+        </div>
+
+        {/* Presets Bar */}
+        <div className="flex items-center gap-1.5 bg-zinc-900/60 p-1 rounded-lg border border-zinc-800/80">
+          <Sliders className="w-3 h-3 text-zinc-400 ml-1.5 mr-0.5" />
+          {DEFAULT_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => settings.applyPreset(p)}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition cursor-pointer ${
+                settings.activePresetId === p.id
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+              }`}
+            >
+              {p.name}
+            </button>
+          ))}
         </div>
 
         {files.length > 0 && !isConverting && (
@@ -236,6 +273,7 @@ export default function App() {
           </div>
         )}
       </header>
+
       {/* Main Workspace */}
       <main className="flex-1 relative overflow-hidden flex flex-col p-4">
         {files.length === 0 ? (
@@ -251,7 +289,7 @@ export default function App() {
               <Upload className="w-8 h-8 stroke-[1.75]" />
             </div>
             <h2 className="text-sm font-medium text-zinc-200 mb-1">Drop images anywhere here</h2>
-            <p className="text-xs text-zinc-500 mb-4">or click to browse from your computer</p>
+            <p className="text-xs text-zinc-500 mb-4">or click to browse from your computer (⌘O)</p>
             <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-500 bg-zinc-900/80 px-2.5 py-1 rounded-full border border-zinc-800">
               JPG • PNG • WebP
             </span>
@@ -300,7 +338,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     {file.status === 'queued' && (
                       <span className="text-[10px] text-zinc-400 bg-zinc-800/60 px-2 py-0.5 rounded border border-zinc-700/40">Ready</span>
                     )}
@@ -310,10 +348,21 @@ export default function App() {
                       </span>
                     )}
                     {file.status === 'completed' && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Done
                         </span>
+
+                        {/* Nút Xem So Sánh Chi Tiết */}
+                        <button
+                          onClick={() => setSelectedComparisonItem(file)}
+                          title="Compare Before / After"
+                          className="text-zinc-400 hover:text-blue-400 p-1 hover:bg-zinc-800 rounded transition cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Nút Reveal trong Finder */}
                         {file.outputPath && (
                           <button
                             onClick={() => handleReveal(file.outputPath!)}
@@ -347,7 +396,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Progress Bar */}
+      {/* Realtime Progress Bar */}
       {isConverting && (
         <div className="w-full bg-zinc-800 h-1 relative overflow-hidden">
           <div
@@ -458,11 +507,19 @@ export default function App() {
               className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs px-5 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/20 transition cursor-pointer active:scale-95"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Convert All</span>
+              <span>Convert All (⌘↵)</span>
             </button>
           )}
         </div>
       </footer>
+
+      {/* Comparison Modal */}
+      {selectedComparisonItem && (
+        <ComparisonModal
+          item={selectedComparisonItem}
+          onClose={() => setSelectedComparisonItem(null)}
+        />
+      )}
     </div>
   );
 }

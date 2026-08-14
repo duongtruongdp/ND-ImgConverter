@@ -103,10 +103,32 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             fetch_batch_metadata,
+            read_image_as_data_url,
             reveal_in_finder,
             start_batch_conversion,
             cancel_conversion
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+#[tauri::command]
+async fn read_image_as_data_url(path: String) -> Result<String, EngineError> {
+    tokio::task::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        if !p.exists() {
+            return Err(EngineError::FileNotFound(path));
+        }
+        let bytes = std::fs::read(p)?;
+        let mime = match p.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase().as_str() {
+            "jpg" | "jpeg" => "image/jpeg",
+            "png" => "image/png",
+            "webp" => "image/webp",
+            _ => "application/octet-stream",
+        };
+        use base64::Engine;
+        let base64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Ok(format!("data:{};base64,{}", mime, base64_str))
+    })
+    .await
+    .map_err(|_| EngineError::Cancelled)?
 }
