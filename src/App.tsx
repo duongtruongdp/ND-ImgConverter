@@ -24,7 +24,7 @@ import {
 import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
 import { ComparisonModal } from './components/comparison/ComparisonModal';
-import { ImageItem, OutputFormat, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
+import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
   filePath: string;
