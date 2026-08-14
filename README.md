@@ -89,7 +89,7 @@ The output installation files will be available in:
 
 [x] v0.2: Split-screen Before/After Image Comparison Slider, Presets Manager, Keyboard Shortcuts.
 
-[ ] v0.3: AVIF & HEIC/HEIF Format Support.
+[x] v0.3: Support 50+ inputs (including HEIC/RAW/SVG) and 19 modern output formats with dark minimalist UI.
 
 [ ] v0.4: EXIF & Color Profile (ICC) Preservation Engine.
 
