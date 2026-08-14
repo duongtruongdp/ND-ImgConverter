@@ -1,10 +1,9 @@
-name: Release App
+name: "Release App"
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - "v*"
 
 jobs:
   release:
@@ -14,44 +13,69 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # macOS Apple Silicon (M1/M2/M3/M4)
-            args: '--target aarch64-apple-darwin'
-            target: 'aarch64-apple-darwin'
-
-          - platform: 'macos-13' # macOS Intel x86_64 (Dùng runner macos-13 native Intel để không lỗi C cross-compile)
-            args: '--target x86_64-apple-darwin'
-            target: 'x86_64-apple-darwin'
-
-          - platform: 'windows-latest' # Windows x64 (MSI / EXE)
-            args: '--target x86_64-pc-windows-msvc'
-            target: 'x86_64-pc-windows-msvc'
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+          - platform: "windows-latest"
+            args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
+          cache: "npm"
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
-      - name: Install dependencies
+      - name: Install dependencies (Ubuntu only if needed)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
         run: npm install
 
-      - name: Build Tauri App
+      - name: Build Tauri App & Create Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'ND Image Converter v__VERSION__'
-          releaseBody: 'See the assets below to download and install for your OS.'
+          tagName: ${{ github.ref_name }}
+          releaseName: "ND Image Converter ${{ github.ref_name }}"
           releaseDraft: false
-          prerelease: false
+          releasePrerelease: false
           args: ${{ matrix.args }}
+          body: |
+            ### 🔒 Privacy & Security Notice
+            **ND Image Converter is 100% open-source, safe, and contains NO malware or telemetry.**
+            Because the app is not code-signed with expensive Apple Developer or Microsoft certificates, your operating system may show a security prompt upon first launch.
+
+            ---
+
+            ### 🍏 macOS Installation Guide
+            If macOS displays an error like *"App is damaged and can't be opened"* or blocks the app via Gatekeeper:
+            1. Drag **ND Image Converter** into your `/Applications` folder.
+            2. Open **Terminal** and run the following command to remove the quarantine flag:
+            ```bash
+            sudo xattr -cr /Applications/ND\ Image\ Converter.app
+            ```
+            3. Enter your Mac password when prompted, then open the app normally.
+            > *Alternative:* Right-click the app in Finder $\rightarrow$ Select **Open** $\rightarrow$ Click **Open** in the confirmation dialog.
+
+            ---
+
+            ### 🪟 Windows Installation Guide
+            If Windows SmartScreen displays *"Windows protected your PC"*:
+            1. Click **More info**.
+            2. Click **Run anyway**.
+            3. *(If required)* Right-click the installer/app and choose **Run as administrator**.
+
+            ---
+            *All conversions are processed 100% locally on your machine.*
