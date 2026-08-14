@@ -10,15 +10,22 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.output/
 *.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri / Rust build artifacts
+src-tauri/target/
+src-tauri/binaries/
+
+# macOS metadata
+.DS_Store
