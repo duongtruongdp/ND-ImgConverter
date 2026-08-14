@@ -77,3 +77,46 @@ export interface ImageItem {
   status: FileStatus;
   errorMessage?: string;
 }
+
+export type ColorSpace = 'original' | 'srgb' | 'display-p3' | 'adobe-rgb';
+
+export type MetadataPolicy = 'keep-all' | 'remove-location' | 'strip-all' | 'custom';
+
+export interface MetadataSettings {
+  policy: MetadataPolicy;
+  keepExif: boolean;
+  keepIcc: boolean;
+  keepGps: boolean;
+  keepXmp: boolean;
+  keepCopyright: boolean;
+}
+
+export interface ExportProfile {
+  id: string;
+  name: string;
+  description?: string;
+  format: OutputFormat;
+  quality: number;
+  resizeMode: ResizeMode;
+  targetWidth?: number;
+  targetHeight?: number;
+  scalePercentage?: number;
+  maintainAspectRatio: boolean;
+  colorSpace: ColorSpace;
+  metadata: MetadataSettings;
+  outputSuffix?: string;
+}
+
+export interface WatchFolderConfig {
+  id: string;
+  enabled: boolean;
+  sourcePath: string;
+  outputPath: string;
+  profileId: string;
+}
+
+export interface SizeEstimationPayload {
+  originalSize: number;
+  estimatedSize: number;
+  savingsPercentage: number;
+}

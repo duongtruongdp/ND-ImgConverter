@@ -24,6 +24,45 @@ pub enum OutputFormat {
     Astc,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum TargetColorSpace {
+    Original,
+    Srgb,
+    DisplayP3,
+    AdobeRgb,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum MetadataPolicy {
+    KeepAll,
+    RemoveLocation,
+    StripAll,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataSettings {
+    pub policy: MetadataPolicy,
+    pub keep_exif: bool,
+    pub keep_icc: bool,
+    pub keep_gps: bool,
+    pub keep_copyright: bool,
+}
+
+impl Default for MetadataSettings {
+    fn default() -> Self {
+        Self {
+            policy: MetadataPolicy::RemoveLocation,
+            keep_exif: true,
+            keep_icc: true,
+            keep_gps: false,
+            keep_copyright: true,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ResizeMode {
@@ -42,6 +81,8 @@ pub struct ConversionOptions {
     pub scale_percentage: Option<u32>,
     pub maintain_aspect_ratio: bool,
     pub output_directory: Option<String>,
+    pub color_space: Option<TargetColorSpace>,
+    pub metadata: Option<MetadataSettings>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -73,4 +114,11 @@ pub struct ImageMetadata {
     pub size: u64,
     pub thumbnail_base64: String,
     pub format_name: String,
+    pub color_profile: Option<String>,
+    pub camera_model: Option<String>,
+    pub lens_model: Option<String>,
+    pub iso: Option<u32>,
+    pub f_number: Option<String>,
+    pub exposure_time: Option<String>,
+    pub has_gps: bool,
 }

@@ -13,11 +13,12 @@ use image::{
 };
 use webp::Encoder as WebpEncoder;
 
+use crate::engine::color::apply_color_transform;
+use crate::engine::metadata::extract_exif_info;
 use crate::engine::resize::apply_resize;
 use crate::errors::EngineError;
-use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, OutputFormat};
+use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, OutputFormat, TargetColorSpace};
 
-/// Universal Image Decoder
 pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> {
     let ext = input_path
         .extension()
@@ -25,7 +26,6 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         .unwrap_or("")
         .to_lowercase();
 
-    // 1. Process Vector SVG
     if ext == "svg" {
         let svg_data = std::fs::read(input_path)?;
         let opt = usvg::Options::default();
@@ -47,7 +47,6 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         return Ok(DynamicImage::ImageRgba8(rgba_buf));
     }
 
-    // 2. Process RAW formats (ARW, CR2, NEF, DNG, RAF, RW2...)
     let raw_extensions = ["arw", "cr2", "crw", "dng", "nef", "orf", "pef", "raf", "rw2", "sr2", "srf"];
     if raw_extensions.contains(&ext.as_str()) {
         if let Ok(raw_image) = rawloader::decode_file(input_path) {
@@ -55,7 +54,6 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
             let height = raw_image.height as u32;
 
             if let rawloader::RawImageData::Integer(data) = raw_image.data {
-                // convert 16-bit raw CFA to 8-bit RGB preview
                 let mut rgb_buf = Vec::with_capacity((width * height * 3) as usize);
                 for pixel in data.iter().take((width * height) as usize) {
                     let val = (*pixel >> 6).min(255) as u8;
@@ -70,7 +68,6 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         }
     }
 
-    // 3. Handle standard raster formats via the `image` crate (JPG, PNG, WebP, BMP, TIFF, TGA, GIF, ICO, PNM, EXR...)
     let reader = ImageReader::open(input_path)?
         .with_guessed_format()
         .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
@@ -87,9 +84,17 @@ pub fn process_single_image(
         return Err(EngineError::FileNotFound(input_path_str.to_string()));
     }
 
+    // 1. Decode image
     let img = decode_any_image(input_path)?;
-    let processed_img = apply_resize(img, options);
 
+    // 2. Resize
+    let resized_img = apply_resize(img, options);
+
+    // 3. Color Transform (Little-CMS 2)
+    let target_color_space = options.color_space.clone().unwrap_or(TargetColorSpace::Srgb);
+    let processed_img = apply_color_transform(resized_img, &target_color_space, None);
+
+    // 4. Locate the output folder and file extension
     let parent_dir = if let Some(ref dir) = options.output_directory {
         if !dir.trim().is_empty() {
             PathBuf::from(dir)
@@ -129,7 +134,7 @@ pub fn process_single_image(
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
 
-    // Encoder Pipeline
+    // 5. Encode according to the target format
     match options.format {
         OutputFormat::Jpeg => {
             let file = File::create(&output_path)?;
@@ -221,6 +226,7 @@ pub fn get_image_metadata(input_path_str: &str) -> Result<ImageMetadata, EngineE
         .unwrap_or("IMG")
         .to_uppercase();
 
+    let exif_meta = extract_exif_info(path);
     let img = decode_any_image(path)?;
     let (w, h) = (img.width(), img.height());
 
@@ -242,5 +248,12 @@ pub fn get_image_metadata(input_path_str: &str) -> Result<ImageMetadata, EngineE
         size: file_size,
         thumbnail_base64,
         format_name,
+        color_profile: Some("sRGB / Rec.709".to_string()),
+        camera_model: exif_meta.camera_model,
+        lens_model: exif_meta.lens_model,
+        iso: exif_meta.iso,
+        f_number: exif_meta.f_number,
+        exposure_time: exif_meta.exposure_time,
+        has_gps: exif_meta.has_gps,
     })
 }

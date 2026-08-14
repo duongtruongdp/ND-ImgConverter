@@ -1,6 +1,6 @@
 [package]
 name = "nd-image-converter"
-version = "0.3.0"
+version = "0.4.0"
 description = "Fast offline batch image converter"
 authors = ["duongtruongdp"]
 edition = "2021"
@@ -40,5 +40,15 @@ resvg = "0.45"
 usvg = "0.45"
 rawloader = "0.37"
 
+# 1. Folder Automation / File System Watcher
+notify = "6.1"
+notify-debouncer-mini = "0.4"
+# 2. Color Management System (ICC Profiles: sRGB, Display P3, Adobe RGB)
+lcms2 = "6.0"
+
+# 3. EXIF & Metadata Control
+kamadak-exif = "0.5"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+

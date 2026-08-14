@@ -19,11 +19,14 @@ import {
   ArrowRight, 
   Eye, 
   Sliders,
-  ChevronDown
+  ChevronDown,
+  Layers,
+  Activity
 } from 'lucide-react';
 import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
 import { ComparisonModal } from './components/comparison/ComparisonModal';
+import { AutomationTab } from './components/automation/AutomationTab';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
@@ -44,9 +47,29 @@ const formatBytes = (bytes: number) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
+const calculateEstimatedSavings = (totalInputBytes: number, format: string, quality: number) => {
+  if (totalInputBytes === 0) return { estBytes: 0, percent: 0 };
+
+  let ratio = 0.5;
+  if (format === 'webp') {
+    ratio = 0.15 + (quality / 100) * 0.35;
+  } else if (format === 'avif') {
+    ratio = 0.10 + (quality / 100) * 0.30;
+  } else if (format === 'jpeg') {
+    ratio = 0.25 + (quality / 100) * 0.55;
+  } else if (format === 'png') {
+    ratio = 0.75;
+  }
+
+  const estBytes = Math.round(totalInputBytes * ratio);
+  const percent = Math.max(5, Math.round((1 - ratio) * 100));
+  return { estBytes, percent };
+};
+
 export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
   const settings = useSettingsStore();
+  const [currentTab, setCurrentTab] = useState<'converter' | 'automation'>('converter');
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
@@ -54,7 +77,7 @@ export default function App() {
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
   const formatMenuRef = useRef<HTMLDivElement>(null);
 
-  // Đóng format menu khi click ra ngoài
+  // Close format menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) {
@@ -144,6 +167,7 @@ export default function App() {
           scalePercentage: Number(settings.scalePercentage) || undefined,
           maintainAspectRatio: settings.maintainAspectRatio,
           outputDirectory: settings.outputDirectory || null,
+          colorSpace: 'srgb',
         },
       });
     } catch (err) {
@@ -155,27 +179,29 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-      if (isCmdOrCtrl && e.key === 'o') {
+      if (isCmdOrCtrl && e.key === 'o' && currentTab === 'converter') {
         e.preventDefault();
         handleSelectFiles();
-      } else if (isCmdOrCtrl && e.key === 'Enter') {
+      } else if (isCmdOrCtrl && e.key === 'Enter' && currentTab === 'converter') {
         e.preventDefault();
         handleStartBatch();
-      } else if (isCmdOrCtrl && e.key === 'Backspace' && files.length > 0 && !isConverting) {
+      } else if (isCmdOrCtrl && e.key === 'Backspace' && files.length > 0 && !isConverting && currentTab === 'converter') {
         e.preventDefault();
         clearFiles();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSelectFiles, handleStartBatch, files.length, isConverting, clearFiles]);
+  }, [handleSelectFiles, handleStartBatch, files.length, isConverting, clearFiles, currentTab]);
 
   useEffect(() => {
     const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === 'over' || event.payload.type === 'enter') setIsDragging(true);
       else if (event.payload.type === 'drop') {
         setIsDragging(false);
-        processIncomingFiles(event.payload.paths);
+        if (currentTab === 'converter') {
+          processIncomingFiles(event.payload.paths);
+        }
       } else if (event.payload.type === 'leave') {
         setIsDragging(false);
       }
@@ -184,7 +210,7 @@ export default function App() {
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [processIncomingFiles]);
+  }, [processIncomingFiles, currentTab]);
 
   useEffect(() => {
     const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
@@ -241,319 +267,370 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
-      {/* Header */}
+      {/* Header with Perfect Centered Tabs */}
       <header
         data-tauri-drag-region
-        className="h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-10 shrink-0"
+        className="relative h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-30 shrink-0"
       >
-        <div data-tauri-drag-region className="flex items-center gap-2 pointer-events-none">
+        {/* Left: Branding */}
+        <div data-tauri-drag-region className="flex items-center gap-2 pointer-events-none z-10">
           <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.3</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.4</span>
         </div>
 
-        {/* Presets Bar */}
-        <div className="flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80">
-          <Sliders className="w-3 h-3 text-zinc-500 ml-1.5 mr-1" />
-          {DEFAULT_PRESETS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => settings.applyPreset(p)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                settings.activePresetId === p.id
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-              }`}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-
-        {files.length > 0 && !isConverting && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSelectFiles}
-              className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#181c24] hover:bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <Plus className="w-3 h-3" /> Add more
-            </button>
-            <button
-              onClick={clearFiles}
-              className="text-[11px] font-medium px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 flex items-center gap-1 transition cursor-pointer"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
-        )}
-      </header>
-
-      {/* Main Workspace */}
-      <main className="flex-1 relative overflow-hidden flex flex-col p-4">
-        {files.length === 0 ? (
-          <div
-            onClick={handleSelectFiles}
-            className={`flex-1 rounded-3xl border border-dashed transition-all duration-300 flex flex-col items-center justify-center cursor-pointer ${
-              isDragging
-                ? 'border-blue-500 bg-blue-500/10 scale-[0.99]'
-                : 'border-zinc-800/80 hover:border-zinc-700 bg-[#111317]/50 hover:bg-[#111317]/80'
+        {/* Center: Absolute Fixed Position Tabs */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80 shadow-inner z-20">
+          <button
+            onClick={() => setCurrentTab('converter')}
+            className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              currentTab === 'converter'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
             }`}
           >
-            <div className="p-4 rounded-2xl bg-[#181b22] border border-zinc-700/40 mb-4 shadow-2xl text-blue-400">
-              <Upload className="w-8 h-8 stroke-[1.75]" />
-            </div>
-            <h2 className="text-sm font-medium text-zinc-200 mb-1">Drop images or camera RAW files here</h2>
-            <p className="text-xs text-zinc-500 mb-4">or click to browse from computer (⌘O)</p>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-400 bg-[#161920] px-3 py-1.5 rounded-full border border-zinc-800">
-                50+ INPUT FORMATS • 19+ OUTPUT FORMATS
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-            {files.map((file) => {
-              const savingsPercent =
-                file.outputSize && file.size
-                  ? Math.round(((file.size - file.outputSize) / file.size) * 100)
-                  : null;
-
-              return (
-                <div
-                  key={file.id}
-                  className="group flex items-center justify-between p-2.5 rounded-2xl bg-[#12141a] border border-zinc-850 hover:border-zinc-750 transition-all shadow-sm"
-                >
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden">
-                      {file.thumbnail ? (
-                        <img src={file.thumbnail} alt={file.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <ImageIcon className="w-4 h-4 text-zinc-500" />
-                      )}
-                    </div>
-
-                    <div className="flex flex-col truncate">
-                      <span className="text-xs font-medium text-zinc-200 truncate">{file.name}</span>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                        {file.width && file.height && <span>{file.width}×{file.height}</span>}
-                        {file.size > 0 && <span>• {formatBytes(file.size)}</span>}
-                        {file.outputSize && (
-                          <div className="flex items-center gap-1 text-emerald-400">
-                            <ArrowRight className="w-2.5 h-2.5" />
-                            <span>{formatBytes(file.outputSize)}</span>
-                            {savingsPercent !== null && savingsPercent > 0 && (
-                              <span className="bg-emerald-500/10 px-1 py-0.2 rounded font-mono">
-                                -{savingsPercent}%
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
-                    {file.status === 'queued' && (
-                      <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-0.5 rounded-md border border-zinc-700/40">Ready</span>
-                    )}
-                    {file.status === 'processing' && (
-                      <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 flex items-center gap-1">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Processing
-                      </span>
-                    )}
-                    {file.status === 'completed' && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Done
-                        </span>
-                        <button
-                          onClick={() => setSelectedComparisonItem(file)}
-                          title="Compare Before / After"
-                          className="text-zinc-400 hover:text-blue-400 p-1.5 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        {file.outputPath && (
-                          <button
-                            onClick={() => handleReveal(file.outputPath!)}
-                            title="Show in Finder"
-                            className="text-zinc-400 hover:text-zinc-200 p-1.5 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {file.status === 'failed' && (
-                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 flex items-center gap-1" title={file.errorMessage}>
-                        <AlertCircle className="w-3 h-3" /> Error
-                      </span>
-                    )}
-
-                    {!isConverting && (
-                      <button
-                        onClick={() => removeFile(file.id)}
-                        className="text-zinc-500 hover:text-red-400 p-1.5 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      {/* Progress Bar */}
-      {isConverting && (
-        <div className="w-full bg-zinc-900 h-1 relative overflow-hidden">
-          <div
-            className="bg-blue-500 h-full transition-all duration-200 shadow-[0_0_8px_rgba(59,130,246,0.8)]"
-            style={{ width: `${(progress.completed / (progress.total || 1)) * 100}%` }}
-          />
-        </div>
-      )}
-
-      {/* Modern Minimalist Bottom Controls */}
-      <footer className="p-3.5 bg-[#101216]/95 border-t border-zinc-800/80 flex items-center justify-between gap-4 z-20 shrink-0">
-        <div className="flex items-center gap-3 flex-wrap">
-          
-          {/* Format Pill Popover Trigger */}
-          <div className="relative" ref={formatMenuRef}>
-            <button
-              onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}
-              className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
-            >
-              <span className="text-zinc-400 font-normal">Format</span>
-              <span className="font-semibold text-blue-400 uppercase tracking-wider">{settings.format}</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${isFormatMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* 20 Output Formats Grid Modal */}
-            {isFormatMenuOpen && (
-              <div className="absolute bottom-11 left-0 w-[420px] bg-[#12151b] border border-zinc-800 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-800/80 px-1">
-                  <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Select Output Format</span>
-                  <span className="text-[10px] text-zinc-400 font-mono">19 Formats</span>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto pr-1">
-                  {ALL_OUTPUT_FORMATS.map((item) => (
-                    <button
-                      key={item.value}
-                      onClick={() => {
-                        settings.setFormat(item.value);
-                        setIsFormatMenuOpen(false);
-                      }}
-                      className={`h-8 rounded-xl text-[11px] font-medium transition-all flex items-center justify-center cursor-pointer border ${
-                        settings.format === item.value
-                          ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30'
-                          : 'bg-[#181b22] border-zinc-800/80 text-zinc-300 hover:bg-[#202530] hover:border-zinc-700 hover:text-white'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Quality Slider Pill */}
-          {(settings.format === 'webp' || settings.format === 'jpeg' || settings.format === 'avif') && (
-            <div className="h-8 px-3 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-2.5 shadow-sm">
-              <span className="text-xs text-zinc-400">Quality</span>
-              <input
-                type="range"
-                min="1"
-                max="100"
-                value={settings.quality}
-                onChange={(e) => settings.setQuality(Number(e.target.value))}
-                className="w-16 accent-blue-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
-              />
-              <span className="text-xs font-mono font-medium text-zinc-300 w-7">{settings.quality}%</span>
-            </div>
-          )}
-
-          {/* Resize Segmented Pill */}
-          <div className="h-8 p-0.5 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-0.5 shadow-sm">
-            {(['original', 'width', 'percentage'] as ResizeMode[]).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => settings.setResizeMode(mode)}
-                className={`h-7 px-2.5 rounded-lg text-[11px] font-medium capitalize transition cursor-pointer ${
-                  settings.resizeMode === mode
-                    ? 'bg-[#252a36] text-white border border-zinc-700/60 shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                {mode === 'original' ? 'Original' : mode === 'width' ? 'Width' : 'Scale %'}
-              </button>
-            ))}
-
-            {settings.resizeMode === 'width' && (
-              <input
-                type="number"
-                value={settings.targetWidth || ''}
-                onChange={(e) => settings.setTargetWidth(Number(e.target.value))}
-                placeholder="px"
-                className="w-16 h-7 ml-1 bg-[#101216] border border-zinc-700/80 text-zinc-200 text-xs rounded-lg px-2 outline-none focus:border-blue-500 font-mono"
-              />
-            )}
-
-            {settings.resizeMode === 'percentage' && (
-              <input
-                type="number"
-                value={settings.scalePercentage || ''}
-                onChange={(e) => settings.setScalePercentage(Number(e.target.value))}
-                placeholder="%"
-                className="w-14 h-7 ml-1 bg-[#101216] border border-zinc-700/80 text-zinc-200 text-xs rounded-lg px-2 outline-none focus:border-blue-500 font-mono"
-              />
-            )}
-          </div>
-
-          {/* Output Folder Selector Pill */}
+            <Layers className="w-3.5 h-3.5" /> Batch Convert
+          </button>
           <button
-            onClick={handleSelectOutputFolder}
-            className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
-            title={settings.outputDirectory ? `Output: ${settings.outputDirectory}` : 'Same folder as source'}
+            onClick={() => setCurrentTab('automation')}
+            className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              currentTab === 'automation'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+            }`}
           >
-            <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
-            <span className="max-w-[110px] truncate">
-              {settings.outputDirectory ? settings.outputDirectory.split('/').pop() : 'Source Dir'}
-            </span>
+            <Activity className="w-3.5 h-3.5" /> Watch Folder
           </button>
         </div>
 
-        {/* Action Button */}
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] text-zinc-400 font-mono">
-            {isConverting ? `${progress.completed}/${progress.total}` : `${files.length} items`}
-          </span>
+        {/* Right: Presets & Quick Actions (Visible on Converter Tab) */}
+        <div className="flex items-center gap-2 z-10">
+          {currentTab === 'converter' && (
+            <>
+              <div className="hidden xl:flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80">
+                <Sliders className="w-3 h-3 text-zinc-500 ml-1.5 mr-1" />
+                {DEFAULT_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => settings.applyPreset(p)}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      settings.activePresetId === p.id
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
 
-          {isConverting ? (
-            <button
-              onClick={handleCancel}
-              className="h-8 px-4 bg-red-600/80 hover:bg-red-600 text-white font-medium text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <Square className="w-3 h-3 fill-current" />
-              <span>Cancel</span>
-            </button>
-          ) : (
-            <button
-              disabled={files.length === 0}
-              onClick={handleStartBatch}
-              className="h-8 px-4.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95"
-            >
-              <Play className="w-3 h-3 fill-current" />
-              <span>Convert (⌘↵)</span>
-            </button>
+              {files.length > 0 && !isConverting && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleSelectFiles}
+                    className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#181c24] hover:bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Add
+                  </button>
+                  <button
+                    onClick={clearFiles}
+                    className="text-[11px] font-medium px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 flex items-center gap-1 transition cursor-pointer"
+                    title="Clear All"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
-      </footer>
+      </header>
+
+      {/* Dynamic Tab Body */}
+      {currentTab === 'converter' ? (
+        <>
+          {/* Main Workspace */}
+          <main className="flex-1 relative overflow-hidden flex flex-col p-4">
+            {files.length === 0 ? (
+              <div
+                onClick={handleSelectFiles}
+                className={`flex-1 rounded-3xl border border-dashed transition-all duration-300 flex flex-col items-center justify-center cursor-pointer ${
+                  isDragging
+                    ? 'border-blue-500 bg-blue-500/10 scale-[0.99]'
+                    : 'border-zinc-800/80 hover:border-zinc-700 bg-[#111317]/50 hover:bg-[#111317]/80'
+                }`}
+              >
+                <div className="p-4 rounded-2xl bg-[#181b22] border border-zinc-700/40 mb-4 shadow-2xl text-blue-400">
+                  <Upload className="w-8 h-8 stroke-[1.75]" />
+                </div>
+                <h2 className="text-sm font-medium text-zinc-200 mb-1">Drop images or camera RAW files here</h2>
+                <p className="text-xs text-zinc-500 mb-4">or click to browse from computer (⌘O)</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-400 bg-[#161920] px-3 py-1.5 rounded-full border border-zinc-800">
+                    50+ INPUT FORMATS • 19+ OUTPUT FORMATS
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+                {files.map((file) => {
+                  const savingsPercent =
+                    file.outputSize && file.size
+                      ? Math.round(((file.size - file.outputSize) / file.size) * 100)
+                      : null;
+
+                  return (
+                    <div
+                      key={file.id}
+                      className="group flex items-center justify-between p-2.5 rounded-2xl bg-[#12141a] border border-zinc-850 hover:border-zinc-750 transition-all shadow-sm"
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden">
+                          {file.thumbnail ? (
+                            <img src={file.thumbnail} alt={file.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="w-4 h-4 text-zinc-500" />
+                          )}
+                        </div>
+
+                        <div className="flex flex-col truncate">
+                          <span className="text-xs font-medium text-zinc-200 truncate">{file.name}</span>
+                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                            {file.width && file.height && <span>{file.width}×{file.height}</span>}
+                            {file.size > 0 && <span>• {formatBytes(file.size)}</span>}
+                            {file.outputSize && (
+                              <div className="flex items-center gap-1 text-emerald-400">
+                                <ArrowRight className="w-2.5 h-2.5" />
+                                <span>{formatBytes(file.outputSize)}</span>
+                                {savingsPercent !== null && savingsPercent > 0 && (
+                                  <span className="bg-emerald-500/10 px-1 py-0.2 rounded font-mono">
+                                    -{savingsPercent}%
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        {file.status === 'queued' && (
+                          <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-0.5 rounded-md border border-zinc-700/40">Ready</span>
+                        )}
+                        {file.status === 'processing' && (
+                          <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Processing
+                          </span>
+                        )}
+                        {file.status === 'completed' && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Done
+                            </span>
+                            <button
+                              onClick={() => setSelectedComparisonItem(file)}
+                              title="Compare Before / After"
+                              className="text-zinc-400 hover:text-blue-400 p-1.5 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            {file.outputPath && (
+                              <button
+                                onClick={() => handleReveal(file.outputPath!)}
+                                title="Show in Finder"
+                                className="text-zinc-400 hover:text-zinc-200 p-1.5 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {file.status === 'failed' && (
+                          <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20 flex items-center gap-1" title={file.errorMessage}>
+                            <AlertCircle className="w-3 h-3" /> Error
+                          </span>
+                        )}
+
+                        {!isConverting && (
+                          <button
+                            onClick={() => removeFile(file.id)}
+                            className="text-zinc-500 hover:text-red-400 p-1.5 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </main>
+
+          {/* Progress Bar */}
+          {isConverting && (
+            <div className="w-full bg-zinc-900 h-1 relative overflow-hidden">
+              <div
+                className="bg-blue-500 h-full transition-all duration-200 shadow-[0_0_8px_rgba(59,130,246,0.8)]"
+                style={{ width: `${(progress.completed / (progress.total || 1)) * 100}%` }}
+              />
+            </div>
+          )}
+
+          {/* Minimalist Bottom Controls */}
+          <footer className="p-3.5 bg-[#101216]/95 border-t border-zinc-800/80 flex items-center justify-between gap-4 z-20 shrink-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Format Pill Popover Trigger */}
+              <div className="relative" ref={formatMenuRef}>
+                <button
+                  onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}
+                  className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
+                >
+                  <span className="text-zinc-400 font-normal">Format</span>
+                  <span className="font-semibold text-blue-400 uppercase tracking-wider">{settings.format}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${isFormatMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Formats Grid Modal */}
+                {isFormatMenuOpen && (
+                  <div className="absolute bottom-11 left-0 w-[420px] bg-[#12151b] border border-zinc-800 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-800/80 px-1">
+                      <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Select Output Format</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">19 Formats</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                      {ALL_OUTPUT_FORMATS.map((item) => (
+                        <button
+                          key={item.value}
+                          onClick={() => {
+                            settings.setFormat(item.value);
+                            setIsFormatMenuOpen(false);
+                          }}
+                          className={`h-8 rounded-xl text-[11px] font-medium transition-all flex items-center justify-center cursor-pointer border ${
+                            settings.format === item.value
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30'
+                              : 'bg-[#181b22] border-zinc-800/80 text-zinc-300 hover:bg-[#202530] hover:border-zinc-700 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quality Slider Pill & Realtime Estimator */}
+              {(settings.format === 'webp' || settings.format === 'jpeg' || settings.format === 'avif') && (
+                <div className="h-8 px-3 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-2.5 shadow-sm">
+                  <span className="text-xs text-zinc-400">Quality</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    value={settings.quality}
+                    onChange={(e) => settings.setQuality(Number(e.target.value))}
+                    className="w-16 accent-blue-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
+                  />
+                  <span className="text-xs font-mono font-medium text-zinc-300 w-7">{settings.quality}%</span>
+
+                  {files.length > 0 && (
+                    <div className="hidden lg:flex items-center gap-1.5 pl-2 border-l border-zinc-800 text-[10px] text-zinc-400">
+                      <span>Est:</span>
+                      <span className="text-emerald-400 font-mono font-semibold">
+                        ~{formatBytes(calculateEstimatedSavings(files.reduce((acc, f) => acc + (f.size || 0), 0), settings.format, settings.quality).estBytes)}
+                      </span>
+                      <span className="text-emerald-400/80 font-mono">
+                        (-{calculateEstimatedSavings(files.reduce((acc, f) => acc + (f.size || 0), 0), settings.format, settings.quality).percent}%)
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Resize Segmented Pill */}
+              <div className="h-8 p-0.5 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-0.5 shadow-sm">
+                {(['original', 'width', 'percentage'] as ResizeMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => settings.setResizeMode(mode)}
+                    className={`h-7 px-2.5 rounded-lg text-[11px] font-medium capitalize transition cursor-pointer ${
+                      settings.resizeMode === mode
+                        ? 'bg-[#252a36] text-white border border-zinc-700/60 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    {mode === 'original' ? 'Original' : mode === 'width' ? 'Width' : 'Scale %'}
+                  </button>
+                ))}
+
+                {settings.resizeMode === 'width' && (
+                  <input
+                    type="number"
+                    value={settings.targetWidth || ''}
+                    onChange={(e) => settings.setTargetWidth(Number(e.target.value))}
+                    placeholder="px"
+                    className="w-16 h-7 ml-1 bg-[#101216] border border-zinc-700/80 text-zinc-200 text-xs rounded-lg px-2 outline-none focus:border-blue-500 font-mono"
+                  />
+                )}
+
+                {settings.resizeMode === 'percentage' && (
+                  <input
+                    type="number"
+                    value={settings.scalePercentage || ''}
+                    onChange={(e) => settings.setScalePercentage(Number(e.target.value))}
+                    placeholder="%"
+                    className="w-14 h-7 ml-1 bg-[#101216] border border-zinc-700/80 text-zinc-200 text-xs rounded-lg px-2 outline-none focus:border-blue-500 font-mono"
+                  />
+                )}
+              </div>
+
+              {/* Output Folder Selector Pill */}
+              <button
+                onClick={handleSelectOutputFolder}
+                className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
+                title={settings.outputDirectory ? `Output: ${settings.outputDirectory}` : 'Same folder as source'}
+              >
+                <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="max-w-[110px] truncate">
+                  {settings.outputDirectory ? settings.outputDirectory.split('/').pop() : 'Source Dir'}
+                </span>
+              </button>
+            </div>
+
+            {/* Action Button */}
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-zinc-400 font-mono">
+                {isConverting ? `${progress.completed}/${progress.total}` : `${files.length} items`}
+              </span>
+
+              {isConverting ? (
+                <button
+                  onClick={handleCancel}
+                  className="h-8 px-4 bg-red-600/80 hover:bg-red-600 text-white font-medium text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Square className="w-3 h-3 fill-current" />
+                  <span>Cancel</span>
+                </button>
+              ) : (
+                <button
+                  disabled={files.length === 0}
+                  onClick={handleStartBatch}
+                  className="h-8 px-4.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Convert (⌘↵)</span>
+                </button>
+              )}
+            </div>
+          </footer>
+        </>
+      ) : (
+        /* Tab Automation Workspace */
+        <AutomationTab />
+      )}
 
       {/* Comparison Modal */}
       {selectedComparisonItem && (

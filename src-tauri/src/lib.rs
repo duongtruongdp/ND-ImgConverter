@@ -4,15 +4,34 @@ mod models;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{Emitter, State};
+use tauri::{AppHandle, Emitter, State};
 use rayon::prelude::*;
 
-use engine::pipeline::{get_image_metadata, process_single_image};
-use errors::EngineError;
-use models::conversion::{ConversionOptions, ImageMetadata, ProgressPayload};
+use crate::engine::metadata::extract_exif_info;
+use crate::engine::pipeline::{get_image_metadata, process_single_image};
+use crate::engine::watcher::{start_folder_watcher, stop_folder_watcher, FolderWatcherState};
+use crate::errors::EngineError;
+use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, ProgressPayload};
 
 pub struct AppState {
     pub is_cancelled: Arc<AtomicBool>,
+    pub watcher_state: FolderWatcherState,
+}
+
+#[tauri::command]
+async fn start_watch_automation(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    watch_path: String,
+    output_path: String,
+    options: ConversionOptions,
+) -> Result<(), String> {
+    start_folder_watcher(app, &state.watcher_state, watch_path, output_path, options)
+}
+
+#[tauri::command]
+async fn stop_watch_automation(state: State<'_, AppState>) -> Result<(), String> {
+    stop_folder_watcher(&state.watcher_state)
 }
 
 #[tauri::command]
@@ -100,13 +119,16 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(AppState {
             is_cancelled: Arc::new(AtomicBool::new(false)),
+            watcher_state: FolderWatcherState::new(),
         })
         .invoke_handler(tauri::generate_handler![
             fetch_batch_metadata,
             read_image_as_data_url,
             reveal_in_finder,
             start_batch_conversion,
-            cancel_conversion
+            cancel_conversion,
+            start_watch_automation,
+            stop_watch_automation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
