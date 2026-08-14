@@ -91,7 +91,11 @@ The output installation files will be available in:
 
 [x] v0.3: Support 50+ inputs (including HEIC/RAW/SVG) and 19 modern output formats with dark minimalist UI.
 
-[ ] v0.4: EXIF & Color Profile (ICC) Preservation Engine.
+[x] v0.4: Live Watch Folder automation, ICC color management, instant output size estimation, and pixel-level comparison inspection.
+
+[ ] v0.5:
+
+[ ] v1.0:
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
