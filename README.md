@@ -8,6 +8,9 @@
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)
 
 ---
+<p align="center">
+  <a href="[https://github.com/duongtruongdp/ND-ImgConverter]"><img src="app-icon.png" alt="APP" width="30%"></a>
+</p>
 
 ## ⚡ Overview
 
