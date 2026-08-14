@@ -1,0 +1,468 @@
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { open } from '@tauri-apps/plugin-dialog';
+import { 
+  Upload, 
+  Trash2, 
+  Play, 
+  Square,
+  Loader2, 
+  CheckCircle2, 
+  AlertCircle, 
+  Image as ImageIcon,
+  Plus,
+  Sparkles,
+  FolderOpen,
+  ExternalLink,
+  ArrowRight
+} from 'lucide-react';
+import { useFileStore } from './stores/fileStore';
+import { useSettingsStore } from './stores/settingsStore';
+import { ImageItem, OutputFormat, ResizeMode } from './types/conversion';
+
+interface ProgressPayload {
+  filePath: string;
+  outputPath?: string;
+  outputSize?: number;
+  success: boolean;
+  error?: string;
+  completed: number;
+  total: number;
+}
+
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+};
+
+export default function App() {
+  const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
+  const settings = useSettingsStore();
+  const [isConverting, setIsConverting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [progress, setProgress] = useState({ completed: 0, total: 0 });
+
+  // Xử lý nạp file và fetch thumbnail hàng loạt bằng đa luồng song song
+  const processIncomingFiles = async (paths: string[]) => {
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const filtered = paths.filter((p) => {
+      const ext = p.split('.').pop()?.toLowerCase();
+      return ext && validExtensions.includes(ext);
+    });
+
+    const newFiles: ImageItem[] = filtered.map((p) => ({
+      id: crypto.randomUUID(),
+      path: p,
+      name: p.split('/').pop() || p,
+      size: 0,
+      status: 'queued',
+    }));
+
+    if (newFiles.length > 0) {
+      addFiles(newFiles);
+
+      try {
+        const results: Array<any> = await invoke('fetch_batch_metadata', {
+          paths: newFiles.map((f) => f.path),
+        });
+
+        const validResults = results
+          .filter(Boolean)
+          .map((res) => ({
+            path: res.path,
+            width: res.width,
+            height: res.height,
+            size: res.size,
+            thumbnail: res.thumbnailBase64,
+          }));
+
+        updateBatchFileInfo(validResults);
+      } catch (err) {
+        console.error('Error fetching batch metadata:', err);
+      }
+    }
+  };
+
+  // Drag & drop native OS
+  useEffect(() => {
+    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'over' || event.payload.type === 'enter') {
+        setIsDragging(true);
+      } else if (event.payload.type === 'drop') {
+        setIsDragging(false);
+        processIncomingFiles(event.payload.paths);
+      } else if (event.payload.type === 'leave') {
+        setIsDragging(false);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [addFiles]);
+
+  // Listen progress realtime from Rust
+  useEffect(() => {
+    const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
+      const { filePath, outputPath, outputSize, success, error, completed, total } = event.payload;
+      
+      setProgress({ completed, total });
+
+      const targetFile = files.find((f) => f.path === filePath);
+      if (targetFile) {
+        updateFileStatus(
+          targetFile.id,
+          success ? 'completed' : 'failed',
+          error,
+          outputPath && outputSize ? { path: outputPath, size: outputSize } : undefined
+        );
+      }
+
+      if (completed >= total) {
+        setIsConverting(false);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [files, updateFileStatus]);
+
+  const handleSelectFiles = async () => {
+    try {
+      const selected = await open({
+        multiple: true,
+        filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+      });
+      if (selected) {
+        const paths = Array.isArray(selected) ? selected : [selected];
+        processIncomingFiles(paths);
+      }
+    } catch (err) {
+      console.error('Error opening dialog:', err);
+    }
+  };
+
+  const handleSelectOutputFolder = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (selected && typeof selected === 'string') {
+        settings.setOutputDirectory(selected);
+      }
+    } catch (err) {
+      console.error('Error selecting directory:', err);
+    }
+  };
+
+  const handleStartBatch = async () => {
+    if (files.length === 0 || isConverting) return;
+
+    files.forEach((f) => {
+      if (f.status !== 'completed') updateFileStatus(f.id, 'processing');
+    });
+
+    setIsConverting(true);
+    setProgress({ completed: 0, total: files.length });
+
+    try {
+      await invoke('start_batch_conversion', {
+        files: files.map((f) => f.path),
+        options: {
+          format: settings.format,
+          quality: settings.quality,
+          resizeMode: settings.resizeMode,
+          targetWidth: Number(settings.targetWidth) || undefined,
+          scalePercentage: Number(settings.scalePercentage) || undefined,
+          maintainAspectRatio: settings.maintainAspectRatio,
+          outputDirectory: settings.outputDirectory || null,
+        },
+      });
+    } catch (err) {
+      console.error('Batch convert failed:', err);
+      setIsConverting(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      await invoke('cancel_conversion');
+      setIsConverting(false);
+    } catch (err) {
+      console.error('Cancel failed:', err);
+    }
+  };
+
+  const handleReveal = async (path: string) => {
+    try {
+      await invoke('reveal_in_finder', { path });
+    } catch (e) {
+      console.error('Failed to reveal file:', e);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen w-screen bg-[#0d0f12] text-zinc-200 select-none font-sans antialiased overflow-hidden">
+      {/* Header */}
+      <header
+        data-tauri-drag-region
+        className="h-12 pl-20 pr-5 border-b border-zinc-800/80 flex items-center justify-between bg-[#121418]/60 backdrop-blur-md z-10 shrink-0"
+      >
+        <div data-tauri-drag-region className="flex items-center gap-2 pointer-events-none">
+          <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <Sparkles className="w-3 h-3 text-white" />
+          </div>
+          <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
+        </div>
+
+        {files.length > 0 && !isConverting && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSelectFiles}
+              className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Plus className="w-3 h-3" /> Add more
+            </button>
+            <button
+              onClick={clearFiles}
+              className="text-[11px] font-medium px-2 py-1 rounded-md text-zinc-400 hover:text-red-400 flex items-center gap-1 transition cursor-pointer"
+            >
+              <Trash2 className="w-3 h-3" /> Clear
+            </button>
+          </div>
+        )}
+      </header>
+      {/* Main Workspace */}
+      <main className="flex-1 relative overflow-hidden flex flex-col p-4">
+        {files.length === 0 ? (
+          <div
+            onClick={handleSelectFiles}
+            className={`flex-1 rounded-2xl border-2 border-dashed transition-all duration-300 flex flex-col items-center justify-center cursor-pointer ${
+              isDragging
+                ? 'border-blue-500 bg-blue-500/10 scale-[0.99]'
+                : 'border-zinc-800 hover:border-zinc-700 bg-[#121418]/40 hover:bg-[#121418]/70'
+            }`}
+          >
+            <div className="p-4 rounded-2xl bg-zinc-800/80 border border-zinc-700/50 mb-4 shadow-xl text-blue-400">
+              <Upload className="w-8 h-8 stroke-[1.75]" />
+            </div>
+            <h2 className="text-sm font-medium text-zinc-200 mb-1">Drop images anywhere here</h2>
+            <p className="text-xs text-zinc-500 mb-4">or click to browse from your computer</p>
+            <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-500 bg-zinc-900/80 px-2.5 py-1 rounded-full border border-zinc-800">
+              JPG • PNG • WebP
+            </span>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+            {files.map((file) => {
+              const savingsPercent =
+                file.outputSize && file.size
+                  ? Math.round(((file.size - file.outputSize) / file.size) * 100)
+                  : null;
+
+              return (
+                <div
+                  key={file.id}
+                  className="group flex items-center justify-between p-2.5 rounded-xl bg-[#14171d] border border-zinc-800/80 hover:border-zinc-700/80 transition shadow-sm"
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    {/* Thumbnail */}
+                    <div className="w-10 h-10 rounded-lg bg-zinc-800/80 border border-zinc-700/40 flex items-center justify-center shrink-0 overflow-hidden">
+                      {file.thumbnail ? (
+                        <img src={file.thumbnail} alt={file.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="w-4 h-4 text-zinc-400" />
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex flex-col truncate">
+                      <span className="text-xs font-medium text-zinc-200 truncate">{file.name}</span>
+                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                        {file.width && file.height && <span>{file.width}×{file.height}</span>}
+                        {file.size > 0 && <span>• {formatBytes(file.size)}</span>}
+                        {file.outputSize && (
+                          <div className="flex items-center gap-1 text-emerald-400">
+                            <ArrowRight className="w-2.5 h-2.5" />
+                            <span>{formatBytes(file.outputSize)}</span>
+                            {savingsPercent !== null && savingsPercent > 0 && (
+                              <span className="bg-emerald-500/10 px-1 py-0.2 rounded font-mono">
+                                -{savingsPercent}%
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {file.status === 'queued' && (
+                      <span className="text-[10px] text-zinc-400 bg-zinc-800/60 px-2 py-0.5 rounded border border-zinc-700/40">Ready</span>
+                    )}
+                    {file.status === 'processing' && (
+                      <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Processing
+                      </span>
+                    )}
+                    {file.status === 'completed' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Done
+                        </span>
+                        {file.outputPath && (
+                          <button
+                            onClick={() => handleReveal(file.outputPath!)}
+                            title="Show in Finder / Explorer"
+                            className="text-zinc-400 hover:text-zinc-200 p-1 hover:bg-zinc-800 rounded transition cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {file.status === 'failed' && (
+                      <span className="text-[10px] text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 flex items-center gap-1" title={file.errorMessage}>
+                        <AlertCircle className="w-3 h-3" /> Error
+                      </span>
+                    )}
+
+                    {!isConverting && (
+                      <button
+                        onClick={() => removeFile(file.id)}
+                        className="text-zinc-500 hover:text-red-400 p-1 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* Progress Bar */}
+      {isConverting && (
+        <div className="w-full bg-zinc-800 h-1 relative overflow-hidden">
+          <div
+            className="bg-blue-500 h-full transition-all duration-200"
+            style={{ width: `${(progress.completed / (progress.total || 1)) * 100}%` }}
+          />
+        </div>
+      )}
+
+      {/* Bottom Controls Bar */}
+      <footer className="p-4 bg-[#121418] border-t border-zinc-800/80 flex items-center justify-between gap-4 z-10 shrink-0">
+        <div className="flex items-center gap-5 flex-wrap">
+          {/* Format */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-400">Format</span>
+            <select
+              value={settings.format}
+              onChange={(e) => settings.setFormat(e.target.value as OutputFormat)}
+              className="bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="webp">WebP</option>
+              <option value="jpeg">JPEG</option>
+              <option value="png">PNG</option>
+            </select>
+          </div>
+
+          {/* Quality */}
+          {settings.format !== 'png' && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-zinc-400">Quality</span>
+              <input
+                type="range"
+                min="1"
+                max="100"
+                value={settings.quality}
+                onChange={(e) => settings.setQuality(Number(e.target.value))}
+                className="w-20 accent-blue-500 cursor-pointer"
+              />
+              <span className="text-xs font-mono text-zinc-300 w-6">{settings.quality}%</span>
+            </div>
+          )}
+
+          {/* Resize */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-400">Resize</span>
+            <select
+              value={settings.resizeMode}
+              onChange={(e) => settings.setResizeMode(e.target.value as ResizeMode)}
+              className="bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="original">Original</option>
+              <option value="width">Width (px)</option>
+              <option value="percentage">Percent (%)</option>
+            </select>
+
+            {settings.resizeMode === 'width' && (
+              <input
+                type="number"
+                value={settings.targetWidth || ''}
+                onChange={(e) => settings.setTargetWidth(Number(e.target.value))}
+                placeholder="Width px"
+                className="w-20 bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2 py-1.5 outline-none focus:border-blue-500 font-mono"
+              />
+            )}
+
+            {settings.resizeMode === 'percentage' && (
+              <input
+                type="number"
+                value={settings.scalePercentage || ''}
+                onChange={(e) => settings.setScalePercentage(Number(e.target.value))}
+                placeholder="Scale %"
+                className="w-16 bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-2 py-1.5 outline-none focus:border-blue-500 font-mono"
+              />
+            )}
+          </div>
+
+          {/* Output Folder Selector */}
+          <button
+            onClick={handleSelectOutputFolder}
+            className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+            title={settings.outputDirectory ? `Output: ${settings.outputDirectory}` : 'Same folder as source'}
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="max-w-[100px] truncate">
+              {settings.outputDirectory ? settings.outputDirectory.split('/').pop() : 'Default Output'}
+            </span>
+          </button>
+        </div>
+
+        {/* Action Button */}
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-zinc-500">
+            {isConverting ? `${progress.completed}/${progress.total}` : `${files.length} files`}
+          </span>
+
+          {isConverting ? (
+            <button
+              onClick={handleCancel}
+              className="bg-red-600/80 hover:bg-red-600 text-white font-medium text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Square className="w-3 h-3 fill-current" />
+              <span>Cancel</span>
+            </button>
+          ) : (
+            <button
+              disabled={files.length === 0}
+              onClick={handleStartBatch}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs px-5 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/20 transition cursor-pointer active:scale-95"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Convert All</span>
+            </button>
+          )}
+        </div>
+      </footer>
+    </div>
+  );
+}
