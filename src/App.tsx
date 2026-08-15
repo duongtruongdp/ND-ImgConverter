@@ -178,8 +178,10 @@ export default function App() {
     }
   };
   const handleStartDragging = async (e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement | null;
     if (
       e.button === 0 &&
+      target &&
       !target.closest('button') &&
       !target.closest('input') &&
       !target.closest('.no-drag')
