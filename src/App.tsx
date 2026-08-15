@@ -1,3 +1,4 @@
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -176,7 +177,21 @@ export default function App() {
       console.error('Failed to reveal file:', e);
     }
   };
-
+  const handleStartDragging = async (e: React.MouseEvent<HTMLElement>) => {
+    if (
+      e.button === 0 &&
+      !target.closest('button') &&
+      !target.closest('input') &&
+      !target.closest('.no-drag')
+    ) {
+      try {
+        await getCurrentWindow().startDragging();
+      } catch (err) {
+        console.error('Failed to start window drag:', err);
+      }
+    }
+  };
+  
   // Close the Format popover when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -255,42 +270,45 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
-      {/* Header with Perfect Centered Tabs */}
+      {/* Header with Native startDragging Call */}
       <header
         data-tauri-drag-region
-        className="relative h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-30 shrink-0"
+        onMouseDown={handleStartDragging}
+        className="relative h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-30 shrink-0 select-none cursor-default"
       >
         {/* Left: Branding */}
-        <div data-tauri-drag-region className="flex items-center gap-2 pointer-events-none z-10">
+        <div className="flex items-center gap-2 pointer-events-none z-10">
           <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.4.1</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.4.2</span>
         </div>
 
         {/* Center: Absolute Fixed Position Tabs */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80 shadow-inner z-20">
-          <button
-            onClick={() => setCurrentTab('converter')}
-            className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-              currentTab === 'converter'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" /> Batch Convert
-          </button>
-          <button
-            onClick={() => setCurrentTab('automation')}
-            className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-              currentTab === 'automation'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" /> Watch Folder
-          </button>
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-20">
+          <div className="flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80 shadow-inner">
+            <button
+              onClick={() => setCurrentTab('converter')}
+              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentTab === 'converter'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" /> Batch Convert
+            </button>
+            <button
+              onClick={() => setCurrentTab('automation')}
+              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentTab === 'automation'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" /> Watch Folder
+            </button>
+          </div>
         </div>
 
         {/* Right: Presets & Quick Actions */}
