@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use rayon::prelude::*;
+use std::path::Path;
 
 use crate::engine::pipeline::{
     estimate_single_file_size, get_image_metadata, process_single_image,
@@ -201,6 +202,37 @@ async fn start_watch_automation(
 async fn stop_watch_automation(state: State<'_, AppState>) -> Result<(), String> {
     stop_folder_watcher(&state.watcher_state)
 }
+fn collect_images_recursively(path: &Path, result: &mut Vec<String>) {
+    let valid_extensions = [
+        "jpg", "jpeg", "png", "webp", "svg", "bmp", "ico", "gif", "tiff", "tif",
+        "tga", "pnm", "qoi", "avif", "arw", "cr2", "crw", "dng", "nef", "orf",
+        "pef", "raf", "rw2", "sr2", "srf", "psd", "exr", "heic", "heif",
+    ];
+
+    if path.is_file() {
+        if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+            if valid_extensions.contains(&ext.to_lowercase().as_str()) {
+                result.push(path.to_string_lossy().to_string());
+            }
+        }
+    } else if path.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                collect_images_recursively(&entry.path(), result);
+            }
+        }
+    }
+}
+
+#[tauri::command]
+async fn scan_dropped_paths(paths: Vec<String>) -> Vec<String> {
+    let mut image_paths = Vec::new();
+    for p in paths {
+        let path = Path::new(&p);
+        collect_images_recursively(path, &mut image_paths);
+    }
+    image_paths
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -219,7 +251,8 @@ pub fn run() {
             cancel_conversion,
             start_watch_automation,
             stop_watch_automation,
-            calculate_quality_estimate
+            calculate_quality_estimate,
+            scan_dropped_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

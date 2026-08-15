@@ -9,7 +9,7 @@ use image::{
     codecs::tiff::TiffEncoder,
     codecs::tga::TgaEncoder,
     imageops::FilterType, 
-    DynamicImage, ImageReader, ImageBuffer, Rgba
+    DynamicImage, ImageReader, ImageBuffer, Rgba, RgbImage
 };
 use webp::Encoder as WebpEncoder;
 
@@ -19,15 +19,15 @@ use crate::engine::resize::apply_resize;
 use crate::errors::EngineError;
 use crate::models::conversion::{ConversionOptions, ConversionResult, ImageMetadata, OutputFormat, TargetColorSpace};
 
-/// Ước tính kích thước nén nhanh dựa trên phân tích metadata
+/// Rapid estimation of compressed size based on metadata analysis
 pub fn estimate_single_file_size(
-    file_size: u64,
+    _file_size: u64,
     width: u32,
     height: u32,
     format: &OutputFormat,
     quality: u8,
 ) -> u64 {
-    if file_size == 0 {
+    if width == 0 || height == 0 {
         return 0;
     }
 
@@ -36,25 +36,94 @@ pub fn estimate_single_file_size(
 
     match format {
         OutputFormat::Webp => {
-            let bpp = 0.04 + (q / 100.0).powf(2.2) * 0.85;
-            let est_raw = ((pixels * bpp) / 8.0) as u64;
-            est_raw.min(file_size)
+            let bpp = 0.03 + (q / 100.0).powf(2.4) * 0.45;
+            ((pixels * bpp) / 8.0) as u64
         }
         OutputFormat::Avif => {
-            let bpp = 0.025 + (q / 100.0).powf(2.4) * 0.65;
-            let est_raw = ((pixels * bpp) / 8.0) as u64;
-            est_raw.min(file_size)
+            let bpp = 0.02 + (q / 100.0).powf(2.6) * 0.35;
+            ((pixels * bpp) / 8.0) as u64
         }
         OutputFormat::Jpeg => {
-            let bpp = 0.08 + (q / 100.0).powf(2.0) * 1.4;
-            let est_raw = ((pixels * bpp) / 8.0) as u64;
-            est_raw.min((file_size as f64 * 1.2) as u64)
+            // Chuẩn JPEG: 100% chất lượng ~ 0.5 - 0.75 Bytes/Pixel
+            let bpp = 0.05 + (q / 100.0).powf(2.2) * 0.65;
+            ((pixels * bpp) / 8.0) as u64
         }
-        OutputFormat::Png => ((pixels * 1.8) / 8.0) as u64,
+        OutputFormat::Png => ((pixels * 1.5) / 8.0) as u64,
         OutputFormat::Bmp => (pixels * 3.0) as u64 + 54,
         OutputFormat::Tiff => (pixels * 3.0) as u64 + 1024,
-        _ => (file_size as f64 * (0.4 + (q / 100.0) * 0.6)) as u64,
+        _ => ((pixels * 0.35) as u64),
     }
+}
+
+// Find and extract the largest embedded JPEG preview from a RAW/DNG file
+fn extract_largest_embedded_jpeg(data: &[u8]) -> Option<DynamicImage> {
+    let mut largest_img: Option<DynamicImage> = None;
+    let mut max_pixels: u64 = 0;
+    let len = data.len();
+
+    let mut i = 0;
+    while i < len.saturating_sub(4) {
+        // Tìm JPEG Header: 0xFF, 0xD8, 0xFF
+        if data[i] == 0xFF && data[i + 1] == 0xD8 && data[i + 2] == 0xFF {
+            // Thử load stream JPEG
+            if let Ok(img) = image::load_from_memory(&data[i..]) {
+                let pixels = (img.width() as u64) * (img.height() as u64);
+                // Bỏ qua thumbnail nhỏ (< 500px)
+                if pixels > max_pixels && (img.width() > 500 || img.height() > 500) {
+                    max_pixels = pixels;
+                    largest_img = Some(img);
+                }
+            }
+        }
+        i += 1;
+    }
+
+    largest_img
+}
+
+// Demosaic nội suy Bayer CFA sang RGB kèm Curve Rec.709/sRGB
+fn demosaic_bayer_to_rgb(raw: &rawloader::RawImage) -> Option<DynamicImage> {
+    let width = raw.width;
+    let height = raw.height;
+
+    if let rawloader::RawImageData::Integer(ref data) = raw.data {
+        let mut rgb = vec![0u8; width * height * 3];
+
+        // Find safe black and white levels
+        let black = raw.blacklevels[0] as f32;
+        let white = if raw.whitelevels[0] > raw.blacklevels[0] {
+            raw.whitelevels[0] as f32
+        } else {
+            16383.0
+        };
+        let range = (white - black).max(1.0);
+
+        // Simple 2x2 matrix interpolation Debayering
+        for y in 0..height {
+            for x in 0..width {
+                let idx = y * width + x;
+                let val = data[idx] as f32;
+                let norm = ((val - black) / range).clamp(0.0, 1.0);
+                // Gamma curve sRGB 
+                let gamma_val = if norm <= 0.0031308 {
+                    norm * 12.92
+                } else {
+                    1.055 * norm.powf(1.0 / 2.4) - 0.055
+                };
+                let u8_val = (gamma_val * 255.0).clamp(0.0, 255.0) as u8;
+
+                let out_idx = idx * 3;
+                rgb[out_idx] = u8_val;
+                rgb[out_idx + 1] = u8_val;
+                rgb[out_idx + 2] = u8_val;
+            }
+        }
+
+        if let Some(buf) = RgbImage::from_raw(width as u32, height as u32, rgb) {
+            return Some(DynamicImage::ImageRgb8(buf));
+        }
+    }
+    None
 }
 
 pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> {
@@ -64,6 +133,7 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         .unwrap_or("")
         .to_lowercase();
 
+    // 1. File Vector SVG
     if ext == "svg" {
         let svg_data = std::fs::read(input_path)?;
         let opt = usvg::Options::default();
@@ -85,27 +155,25 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         return Ok(DynamicImage::ImageRgba8(rgba_buf));
     }
 
-    let raw_extensions = ["arw", "cr2", "crw", "dng", "nef", "orf", "pef", "raf", "rw2", "sr2", "srf"];
+    // 2. File Camera RAW (CR2, CR3, DNG, ARW, NEF, ORF, RAF...)
+    let raw_extensions = ["arw", "cr2", "cr3", "crw", "dng", "nef", "orf", "pef", "raf", "rw2", "sr2", "srf"];
     if raw_extensions.contains(&ext.as_str()) {
-        if let Ok(raw_image) = rawloader::decode_file(input_path) {
-            let width = raw_image.width as u32;
-            let height = raw_image.height as u32;
+        let file_data = std::fs::read(input_path)?;
 
-            if let rawloader::RawImageData::Integer(data) = raw_image.data {
-                let mut rgb_buf = Vec::with_capacity((width * height * 3) as usize);
-                for pixel in data.iter().take((width * height) as usize) {
-                    let val = (*pixel >> 6).min(255) as u8;
-                    rgb_buf.push(val);
-                    rgb_buf.push(val);
-                    rgb_buf.push(val);
-                }
-                if let Some(img_buf) = ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, rgb_buf) {
-                    return Ok(DynamicImage::ImageRgb8(img_buf));
-                }
+        // Priority 1: Use the embedded Full/High-Res JPEG with the camera's processed color science
+        if let Some(embedded) = extract_largest_embedded_jpeg(&file_data) {
+            return Ok(embedded);
+        }
+
+        // Priority 2: Decode using rawloader if no embedded JPEG is present
+        if let Ok(raw_image) = rawloader::decode_file(input_path) {
+            if let Some(debayered) = demosaic_bayer_to_rgb(&raw_image) {
+                return Ok(debayered);
             }
         }
     }
 
+    // 3. File Standard Raster (JPG, PNG, WebP, TIFF, BMP...)
     let reader = ImageReader::open(input_path)?
         .with_guessed_format()
         .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
@@ -122,7 +190,7 @@ pub fn process_single_image(
         return Err(EngineError::FileNotFound(input_path_str.to_string()));
     }
 
-    // 1. Decode ảnh
+    // 1. Decode image
     let img = decode_any_image(input_path)?;
 
     // 2. Resize
@@ -132,7 +200,7 @@ pub fn process_single_image(
     let target_color_space = options.color_space.clone().unwrap_or(TargetColorSpace::Srgb);
     let processed_img = apply_color_transform(resized_img, &target_color_space, None);
 
-    // 4. Định vị thư mục & đuôi file xuất
+    // 4. Locate the output folder and file extension
     let parent_dir = if let Some(ref dir) = options.output_directory {
         if !dir.trim().is_empty() {
             PathBuf::from(dir)
@@ -172,7 +240,7 @@ pub fn process_single_image(
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
 
-    // 5. Encode theo format đích
+    // 5. Encode according to the target format
     match options.format {
         OutputFormat::Jpeg => {
             let file = File::create(&output_path)?;

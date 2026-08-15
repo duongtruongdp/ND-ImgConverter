@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
-import { Sparkles, TrendingDown, Gauge } from 'lucide-react';
+import { TrendingDown, Gauge, Sparkles } from 'lucide-react';
 import { useFileStore } from '../../stores/fileStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 
-const formatBytes = (bytes: number) => {
-  if (bytes === 0) return '0 B';
+const formatBytes = (bytes?: number) => {
+  if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -12,34 +12,49 @@ const formatBytes = (bytes: number) => {
 };
 
 export const QualityAnalyzerPill: React.FC = () => {
-  const { files } = useFileStore();
-  const { format, quality, setQuality } = useSettingsStore();
+  const { files = [] } = useFileStore();
+  const settings = useSettingsStore();
+
+  const currentFormat = settings?.format || 'webp';
+  const currentQuality = typeof settings?.quality === 'number' ? settings.quality : 85;
 
   const totalOriginalBytes = useMemo(() => {
-    return files.reduce((acc, f) => acc + (f.size || 0), 0);
+    if (!Array.isArray(files)) return 0;
+    return files.reduce((acc, f) => acc + (f?.size || 0), 0);
   }, [files]);
 
-  // Estimate realtime
   const analysis = useMemo(() => {
-    if (totalOriginalBytes === 0) {
+    if (files.length === 0) {
       return { estBytes: 0, savings: 0, tier: 'Web Balanced', color: 'text-blue-400' };
     }
 
-    const q = Math.max(1, Math.min(100, quality));
-    let ratio = 0.5;
+    const q = Math.max(1, Math.min(100, currentQuality));
+    
+    // Calculate the total number of actual pixels
+    let totalEstimatedBytes = 0;
 
-    if (format === 'webp') {
-      ratio = 0.12 + Math.pow(q / 100, 2.2) * 0.48;
-    } else if (format === 'avif') {
-      ratio = 0.08 + Math.pow(q / 100, 2.4) * 0.42;
-    } else if (format === 'jpeg') {
-      ratio = 0.18 + Math.pow(q / 100, 2.0) * 0.62;
-    } else if (format === 'png') {
-      ratio = 0.85;
-    }
+    files.forEach((f) => {
+      const w = f.width || 4000;
+      const h = f.height || 3000;
+      const pixels = w * h;
 
-    const estBytes = Math.round(totalOriginalBytes * ratio);
-    const savings = Math.max(0, Math.round(((totalOriginalBytes - estBytes) / totalOriginalBytes) * 100));
+      let bpp = 0.5;
+      if (currentFormat === 'webp') {
+        bpp = 0.03 + Math.pow(q / 100, 2.4) * 0.45;
+      } else if (currentFormat === 'avif') {
+        bpp = 0.02 + Math.pow(q / 100, 2.6) * 0.35;
+      } else if (currentFormat === 'jpeg') {
+        bpp = 0.05 + Math.pow(q / 100, 2.2) * 0.65;
+      } else if (currentFormat === 'png') {
+        bpp = 1.5;
+      }
+
+      totalEstimatedBytes += Math.round((pixels * bpp) / 8);
+    });
+
+    const savings = totalOriginalBytes > 0 
+      ? Math.max(0, Math.round(((totalOriginalBytes - totalEstimatedBytes) / totalOriginalBytes) * 100))
+      : 0;
 
     let tier = 'Web Balanced';
     let color = 'text-blue-400';
@@ -58,15 +73,15 @@ export const QualityAnalyzerPill: React.FC = () => {
       color = 'text-amber-400';
     }
 
-    return { estBytes, savings, tier, color };
-  }, [totalOriginalBytes, format, quality]);
+    return { estBytes: totalEstimatedBytes, savings, tier, color };
+  }, [files, totalOriginalBytes, currentFormat, currentQuality]);
 
-  if (!['webp', 'jpeg', 'avif'].includes(format)) {
+  if (!['webp', 'jpeg', 'avif'].includes(currentFormat)) {
     return null;
   }
 
   return (
-    <div className="h-8 px-3 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-3 shadow-sm group relative">
+    <div className="h-8 px-3 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-2.5 shadow-sm group relative">
       <div className="flex items-center gap-2">
         <Gauge className="w-3.5 h-3.5 text-zinc-500" />
         <span className="text-xs text-zinc-400 font-medium">Quality</span>
@@ -74,12 +89,12 @@ export const QualityAnalyzerPill: React.FC = () => {
           type="range"
           min="1"
           max="100"
-          value={quality}
-          onChange={(e) => setQuality(Number(e.target.value))}
-          className="w-18 accent-blue-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
+          value={currentQuality}
+          onChange={(e) => settings?.setQuality && settings.setQuality(Number(e.target.value))}
+          className="w-16 accent-blue-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg"
         />
         <span className="text-xs font-mono font-semibold text-zinc-200 w-7 text-right">
-          {quality}%
+          {currentQuality}%
         </span>
       </div>
 
@@ -96,7 +111,7 @@ export const QualityAnalyzerPill: React.FC = () => {
         </div>
       )}
 
-      {/* Floating Analyzer Card on Hover */}
+      {/* Floating Analyzer Card */}
       <div className="absolute bottom-11 left-0 w-72 bg-[#12151b] border border-zinc-800 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all pointer-events-none z-50">
         <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-800">
           <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">

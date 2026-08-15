@@ -1,6 +1,6 @@
 {
   "productName": "ND Image Converter",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "identifier": "com.nd.imageconverter",
   "build": {
     "beforeDevCommand": "npm run dev",

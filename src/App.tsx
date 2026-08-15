@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
-import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
 import { 
   Upload, 
   Trash2, 
@@ -28,6 +27,7 @@ import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
 import { ComparisonModal } from './components/comparison/ComparisonModal';
 import { AutomationTab } from './components/automation/AutomationTab';
+import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
@@ -48,69 +48,57 @@ const formatBytes = (bytes: number) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-
-
 export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
   const settings = useSettingsStore();
+  
   const [currentTab, setCurrentTab] = useState<'converter' | 'automation'>('converter');
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [selectedComparisonItem, setSelectedComparisonItem] = useState<ImageItem | null>(null);
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
+  
   const formatMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close format menu on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) {
-        setIsFormatMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // 1. Function to scan a path and add files to the list
+  const processIncomingFiles = useCallback(async (rawPaths: string[]) => {
+    try {
+      const scannedPaths: string[] = await invoke('scan_dropped_paths', { paths: rawPaths });
 
-  const processIncomingFiles = useCallback(async (paths: string[]) => {
-    const filtered = paths.filter((p) => {
-      const ext = p.split('.').pop()?.toLowerCase();
-      return ext && SUPPORTED_INPUT_EXTENSIONS.includes(ext);
-    });
+      if (!scannedPaths || scannedPaths.length === 0) return;
 
-    const newFiles: ImageItem[] = filtered.map((p) => ({
-      id: crypto.randomUUID(),
-      path: p,
-      name: p.split('/').pop() || p,
-      size: 0,
-      status: 'queued',
-    }));
+      const newFiles: ImageItem[] = scannedPaths.map((p) => ({
+        id: crypto.randomUUID(),
+        path: p,
+        name: p.split('/').pop() || p,
+        size: 0,
+        status: 'queued',
+      }));
 
-    if (newFiles.length > 0) {
       addFiles(newFiles);
 
-      try {
-        const results: Array<any> = await invoke('fetch_batch_metadata', {
-          paths: newFiles.map((f) => f.path),
-        });
+      const results: Array<any> = await invoke('fetch_batch_metadata', {
+        paths: newFiles.map((f) => f.path),
+      });
 
-        const validResults = results
-          .filter(Boolean)
-          .map((res) => ({
-            path: res.path,
-            width: res.width,
-            height: res.height,
-            size: res.size,
-            thumbnail: res.thumbnailBase64,
-          }));
+      const validResults = results
+        .filter(Boolean)
+        .map((res) => ({
+          path: res.path,
+          width: res.width,
+          height: res.height,
+          size: res.size,
+          thumbnail: res.thumbnailBase64,
+        }));
 
-        updateBatchFileInfo(validResults);
-      } catch (err) {
-        console.error('Error fetching batch metadata:', err);
-      }
+      updateBatchFileInfo(validResults);
+    } catch (err) {
+      console.error('Error processing incoming paths:', err);
     }
   }, [addFiles, updateBatchFileInfo]);
 
+  // 2. Function to open a file selection dialog
   const handleSelectFiles = useCallback(async () => {
     try {
       const selected = await open({
@@ -130,6 +118,7 @@ export default function App() {
     }
   }, [processIncomingFiles]);
 
+  // 3. Batch Convert activation function
   const handleStartBatch = useCallback(async () => {
     if (files.length === 0 || isConverting) return;
 
@@ -160,67 +149,6 @@ export default function App() {
     }
   }, [files, isConverting, settings, updateFileStatus]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-      if (isCmdOrCtrl && e.key === 'o' && currentTab === 'converter') {
-        e.preventDefault();
-        handleSelectFiles();
-      } else if (isCmdOrCtrl && e.key === 'Enter' && currentTab === 'converter') {
-        e.preventDefault();
-        handleStartBatch();
-      } else if (isCmdOrCtrl && e.key === 'Backspace' && files.length > 0 && !isConverting && currentTab === 'converter') {
-        e.preventDefault();
-        clearFiles();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSelectFiles, handleStartBatch, files.length, isConverting, clearFiles, currentTab]);
-
-  useEffect(() => {
-    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
-      if (event.payload.type === 'over' || event.payload.type === 'enter') setIsDragging(true);
-      else if (event.payload.type === 'drop') {
-        setIsDragging(false);
-        if (currentTab === 'converter') {
-          processIncomingFiles(event.payload.paths);
-        }
-      } else if (event.payload.type === 'leave') {
-        setIsDragging(false);
-      }
-    });
-
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [processIncomingFiles, currentTab]);
-
-  useEffect(() => {
-    const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
-      const { filePath, outputPath, outputSize, success, error, completed, total } = event.payload;
-      setProgress({ completed, total });
-
-      const targetFile = files.find((f) => f.path === filePath);
-      if (targetFile) {
-        updateFileStatus(
-          targetFile.id,
-          success ? 'completed' : 'failed',
-          error,
-          outputPath && outputSize ? { path: outputPath, size: outputSize } : undefined
-        );
-      }
-
-      if (completed >= total) {
-        setIsConverting(false);
-      }
-    });
-
-    return () => {
-      unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [files, updateFileStatus]);
-
   const handleSelectOutputFolder = async () => {
     try {
       const selected = await open({ directory: true, multiple: false });
@@ -249,6 +177,82 @@ export default function App() {
     }
   };
 
+  // Close the Format popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) {
+        setIsFormatMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Listen for keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (isCmdOrCtrl && e.key === 'o' && currentTab === 'converter') {
+        e.preventDefault();
+        handleSelectFiles();
+      } else if (isCmdOrCtrl && e.key === 'Enter' && currentTab === 'converter') {
+        e.preventDefault();
+        handleStartBatch();
+      } else if (isCmdOrCtrl && e.key === 'Backspace' && files.length > 0 && !isConverting && currentTab === 'converter') {
+        e.preventDefault();
+        clearFiles();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSelectFiles, handleStartBatch, files.length, isConverting, clearFiles, currentTab]);
+
+  // Listen for Drag & Drop events (including dragging entire folders)
+  useEffect(() => {
+    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'over' || event.payload.type === 'enter') {
+        setIsDragging(true);
+      } else if (event.payload.type === 'drop') {
+        setIsDragging(false);
+        if (currentTab === 'converter') {
+          processIncomingFiles(event.payload.paths);
+        }
+      } else if (event.payload.type === 'leave') {
+        setIsDragging(false);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [processIncomingFiles, currentTab]);
+
+  // Monitoring the progress of the transition
+  useEffect(() => {
+    const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
+      const { filePath, outputPath, outputSize, success, error, completed, total } = event.payload;
+      setProgress({ completed, total });
+
+      const targetFile = files.find((f) => f.path === filePath);
+      if (targetFile) {
+        updateFileStatus(
+          targetFile.id,
+          success ? 'completed' : 'failed',
+          error,
+          outputPath && outputSize ? { path: outputPath, size: outputSize } : undefined
+        );
+      }
+
+      if (completed >= total) {
+        setIsConverting(false);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [files, updateFileStatus]);
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
       {/* Header with Perfect Centered Tabs */}
@@ -262,7 +266,7 @@ export default function App() {
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.4</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.4.1</span>
         </div>
 
         {/* Center: Absolute Fixed Position Tabs */}
@@ -289,7 +293,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Right: Presets & Quick Actions (Visible on Converter Tab) */}
+        {/* Right: Presets & Quick Actions */}
         <div className="flex items-center gap-2 z-10">
           {currentTab === 'converter' && (
             <>
@@ -506,7 +510,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* Quality Analyzer Pill (Realtime Size Estimator) */}
+              {/* Quality Analyzer Pill */}
               <QualityAnalyzerPill />
 
               {/* Resize Segmented Pill */}
@@ -579,7 +583,7 @@ export default function App() {
                   onClick={handleStartBatch}
                   className="h-8 px-4.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:hover:bg-blue-600 text-white font-medium text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <Play className="w-3 h-3 fill-current" />
                   <span>Convert (⌘↵)</span>
                 </button>
               )}
