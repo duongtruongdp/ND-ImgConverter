@@ -84,6 +84,31 @@ The output installation files will be available in:
 - **macOS:** src-tauri/target/release/bundle/dmg/
 - **Windows:** src-tauri/target/release/bundle/msi/
 
+## 🛠️ Troubleshooting
+
+### Q&A
+
+**Question**: Why does macOS say "The application can't be opened"?
+macOS Gatekeeper may block apps downloaded from the internet. Try these fixes:
+
+- Method 1 (Recommended): Open Terminal and run
+```
+xattr -cr /Applications/ND Image Converter.app
+```
+- Method 2: Right-click the app -> select "Open" -> click "Open" in the dialog.
+
+- Method 3: Go to System Settings -> Privacy & Security -> scroll down and click "Open Anyway".
+
+**Question**: Why does Windows show "Windows protected your PC"?
+This SmartScreen warning appears because ND Image Converter isn't code-signed yet. Code signing certificates cost $400+/year, which isn't feasible for a free project at this stage.
+
+To install safely:
+
+- Click "More info" on the warning dialog
+- Click "Run anyway"
+ND Image Converter is 100% free with premium features — download from GitHub and verify it runs completely offline.
+
+
 ## 🗺 Roadmap
 [x] v0.1: Core Engine, Batch Conversion (JPG/PNG/WebP), Fast Thumbnails, Native Drag & Drop.
 
