@@ -8,95 +8,119 @@
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)
 
 ---
+
 <p align="center">
-  <a href="[https://github.com/duongtruongdp/ND-ImgConverter]"><img src="app-icon.png" alt="APP" width="30%"></a>
+  <img src="app-icon.png" alt="ND Image Converter" width="28%">
 </p>
 
-## ⚡ Overview
+<p align="center">
+  <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
+    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.5.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+  </a>
+</p>
 
-**ND Image Converter** is a modern, lightweight desktop utility designed for creators, photographers, and developers who need high-throughput image conversion without sacrificing privacy or speed.
+---
 
-Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine**, it runs 100% offline directly on your machine.
+## ⚡ Quick Download & Install
+
+No terminal or programming tools required. Simply download the pre-built installer for your platform:
+
+| Platform | Installer | Architecture | Download Link |
+| :--- | :--- | :--- | :--- |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download DMG]([https://github.com/duongtruongdp/ND-ImgConverter/releases/latest](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_aarch64.dmg)) |
+| **Windows** | `.exe` (NSIS) | x64 (64-bit) | [Download Installer]([https://github.com/duongtruongdp/ND-ImgConverter/releases/latest](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_x64-setup.exe)) |
+
+### First-Time Launch Instructions
+
+* **macOS (Gatekeeper bypass):**
+  * Drag `ND Image Converter` into your `/Applications` folder.
+  * If macOS says *"The application can't be opened"*, open **Terminal** and run:
+    ```bash
+    sudo xattr -cr "/Applications/ND Image Converter.app"
+    ```
+  * *Alternative:* Right-click the app in Finder $\rightarrow$ select **Open** $\rightarrow$ click **Open Anyway**.
+* **Windows (SmartScreen warning):**
+  * When *"Windows protected your PC"* appears, click **More info** $\rightarrow$ **Run anyway** (this appears only because open-source projects lack paid $400/yr certificate signatures).
+
+---
+
+## 🌟 Overview
+
+**ND Image Converter** is a high-throughput desktop utility designed for photographers, creators, and developers who need instant image format conversions without cloud uploads or privacy compromises.
+
+Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine**, all processing happens 100% locally on your hardware.
 
 ---
 
 ## ✨ Features (v0.5.0)
 
-- 🔒 **100% Offline & Private:** Zero cloud uploads, no telemetry, no tracking — your data stays strictly on your machine.
-
-- ⚡ **Multi-threaded Engine:** Powered by Rust and rayon for ultra-fast batch conversions utilizing full multi-core CPU capabilities (Apple Silicon M-Series & Intel/AMD).
-
+- 🔒 **100% Offline & Private:** Zero cloud uploads, no telemetry, no tracking — your files never leave your device.
+- ⚡ **High-Throughput Multi-threaded Engine:** Powered by Rust and `rayon` to utilize all CPU cores on both Apple Silicon and Intel/AMD processors.
 - 🖼 **Massive Format Support (50+ In / 19 Out):**
-  - Standard Formats: JPEG, PNG, WebP, AVIF, BMP, ICO, ICNS, TIFF, TGA, GIF, SVG, PSD, EXR, and more.
-  - Camera RAW & DNG: Native decoding for Canon (.CR2, .CR3), Adobe (.DNG), Sony (.ARW), Nikon (.NEF), and other major camera profiles with accurate CFA Bayer demosaicing and embedded preview extraction.
-  - Optimized HEIC/HEIF: High-speed decoding via native macOS hardware acceleration and cross-platform memory pipelines.
-
-- 🎨 **Pro Color Management (Little-CMS 2):** Built-in color space transforms with Rec.709, sRGB, Display P3, and Adobe RGB color profiles.
-
-- 📊 **Real-time Quality Analyzer:** Dynamic bitrate and file-size estimation based on megapixel density and compression curves before exporting.
-  
-- 🎯 **Flexible Resize Engine:**
+  - **Standard Formats:** JPEG, PNG, WebP, AVIF, BMP, ICO, ICNS, TIFF, TGA, GIF, SVG, PSD, EXR, and more.
+  - **Camera RAW & DNG:** Native decoding for Canon (.CR2, .CR3), Adobe (.DNG), Sony (.ARW), Nikon (.NEF), and other major camera brands with accurate Bayer demosaicing.
+  - **Optimized HEIC/HEIF:** Direct hardware-accelerated decoding pipelines for instant mobile photo conversions.
+- 🎨 **Pro Color Management (Little-CMS 2):** Built-in color profile transforms supporting Rec.709, sRGB, Display P3, and Adobe RGB.
+- 📊 **Real-time Quality Analyzer:** Dynamic bitrate and target file-size estimation before conversion.
+- 🎯 **Flexible Resize Modes:**
   - Original dimensions
-  - Fixed Width (with aspect-ratio preservation)
+  - Target Width (with automatic aspect-ratio lock)
   - Percentage Scaling
-
-- 👁 **Before/After Split Comparison:** Interactive side-by-side visual inspector to preview compression quality differences instantly.
-
-- 🤖 **Automated Folder Watcher:** Background automation mode that detects new incoming files and converts them on the fly.
-
-- 🔔 **GitHub Auto-Update Checker:** In-app notification alerts for new release tags and direct download links.
-
-- 📂 **Smart Ingestion & Output:** Drag-and-drop entire nested folders with recursive scanning, plus one-click "Reveal in Finder/Explorer".
+- 👁 **Before/After Split Comparison:** Interactive side-by-side visual inspector to preview compression fidelity.
+- 🤖 **Automated Watch Folder:** Background directory monitoring that converts new incoming files on the fly.
+- 🔔 **In-App Auto-Update Checker:** Alerts you directly when new GitHub releases are available.
+- 📂 **Recursive Directory Ingestion:** Drag-and-drop nested folders with one-click "Reveal in Finder / Explorer".
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Desktop Framework:** [Tauri 2](https://tauri.app/)
-- **Core Processing Engine:** [Rust](https://www.rust-lang.org/) (`image`, `rayon`, `webp`, `tokio`)
-- **Frontend Framework:** [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
-- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/)
-- **State Management:** [Zustand](https://github.com/pmndrs/zustand)
-- **Icons:** [Lucide React](https://lucide.dev/)
+* **Desktop Framework:** [Tauri 2](https://tauri.app/)
+* **Core Processing Engine:** [Rust](https://www.rust-lang.org/) (`image`, `rayon`, `webp`, `tokio`, `lcms2`)
+* **Frontend:** [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
+* **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+* **State Management:** [Zustand](https://github.com/pmndrs/zustand)
+* **Icons:** [Lucide React](https://lucide.dev/)
 
 ---
 
-## 🚀 Getting Started
+## 👨‍💻 Development & Building from Source
+
+If you want to contribute or build the application from source code:
 
 ### Prerequisites
 
-Ensure you have the following installed on your machine:
+* [Node.js](https://nodejs.org/) (v18.0 or newer)
+* [Rust & Cargo](https://rustup.rs/) (stable toolchain)
+* **macOS:** Xcode Command Line Tools (`xcode-select --install`)
+* **Windows:** Visual Studio C++ Build Tools (with *Desktop development with C++*)
 
-1. **Node.js:** v18.0 or newer
-2. **Rust & Cargo:** Stable toolchain via `rustup`
-3. **Xcode Command Line Tools** (for macOS):
-   ```bash
-   xcode-select --install
-   ```
+### Local Setup
 
-## ✨ Installation & Development
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/duongtruongdp/ND-ImgConverter.git
-   cd ND-ImgConverter
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run in development mode:
-   ```bash
-   npm run tauri dev
-   ```
+### 1. Clone repository
+```
+git clone [https://github.com/duongtruongdp/ND-ImgConverter.git](https://github.com/duongtruongdp/ND-ImgConverter.git)
+cd ND-ImgConverter
+```
 
-## 📦 Building for Production
-To create an optimized production release (.dmg / .app on macOS, .msi / .exe on Windows):
-  ```bash
-  npm run tauri build
-  ```
-The output installation files will be available in:
-- **macOS:** src-tauri/target/release/bundle/dmg/
-- **Windows:** src-tauri/target/release/bundle/msi/
+### 2. Install dependencies
+```
+npm install
+```
+
+### 3. Start development environment
+```
+npm run tauri dev
+```
+
+### 4. Packaging production release
+```
+npm run tauri build
+```
+The output installation files will be generated in:
+- macOS: src-tauri/target/release/bundle/dmg/
+- Windows: src-tauri/target/release/bundle/nsis/
+
 
 ## 🛠️ Troubleshooting
 
@@ -134,7 +158,10 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 
 [x] v0.5: Integrate GitHub auto-update checker, optimize HEIC fast-path decoding, and polish installer branding.
 
-[ ] v1.0:
+[ ] v0.6: Custom Image/Text Watermark Engine & Batch Keyword Tagging (IPTC/XMP/EXIF).
+
+[ ] v1.0: Stable milestone release with full cross-platform parity.
+
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
