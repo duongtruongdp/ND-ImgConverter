@@ -44,7 +44,6 @@ pub fn estimate_single_file_size(
             ((pixels * bpp) / 8.0) as u64
         }
         OutputFormat::Jpeg => {
-            // Chuẩn JPEG: 100% chất lượng ~ 0.5 - 0.75 Bytes/Pixel
             let bpp = 0.05 + (q / 100.0).powf(2.2) * 0.65;
             ((pixels * bpp) / 8.0) as u64
         }
@@ -63,25 +62,24 @@ fn extract_largest_embedded_jpeg(data: &[u8]) -> Option<DynamicImage> {
 
     let mut i = 0;
     while i < len.saturating_sub(4) {
-        // Tìm JPEG Header: 0xFF, 0xD8, 0xFF
         if data[i] == 0xFF && data[i + 1] == 0xD8 && data[i + 2] == 0xFF {
-            // Thử load stream JPEG
             if let Ok(img) = image::load_from_memory(&data[i..]) {
                 let pixels = (img.width() as u64) * (img.height() as u64);
-                // Bỏ qua thumbnail nhỏ (< 500px)
                 if pixels > max_pixels && (img.width() > 500 || img.height() > 500) {
                     max_pixels = pixels;
                     largest_img = Some(img);
                 }
             }
+            i += 1024;
+        } else {
+            i += 1;
         }
-        i += 1;
     }
 
     largest_img
 }
 
-// Demosaic nội suy Bayer CFA sang RGB kèm Curve Rec.709/sRGB
+// Bayer CFA to RGB demosaicing with Rec.709/sRGB curve
 fn demosaic_bayer_to_rgb(raw: &rawloader::RawImage) -> Option<DynamicImage> {
     let width = raw.width;
     let height = raw.height;
@@ -89,7 +87,6 @@ fn demosaic_bayer_to_rgb(raw: &rawloader::RawImage) -> Option<DynamicImage> {
     if let rawloader::RawImageData::Integer(ref data) = raw.data {
         let mut rgb = vec![0u8; width * height * 3];
 
-        // Find safe black and white levels
         let black = raw.blacklevels[0] as f32;
         let white = if raw.whitelevels[0] > raw.blacklevels[0] {
             raw.whitelevels[0] as f32
@@ -98,13 +95,11 @@ fn demosaic_bayer_to_rgb(raw: &rawloader::RawImage) -> Option<DynamicImage> {
         };
         let range = (white - black).max(1.0);
 
-        // Simple 2x2 matrix interpolation Debayering
         for y in 0..height {
             for x in 0..width {
                 let idx = y * width + x;
                 let val = data[idx] as f32;
                 let norm = ((val - black) / range).clamp(0.0, 1.0);
-                // Gamma curve sRGB 
                 let gamma_val = if norm <= 0.0031308 {
                     norm * 12.92
                 } else {
@@ -133,7 +128,52 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         .unwrap_or("")
         .to_lowercase();
 
-    // 1. File Vector SVG
+    // 1. HEIC / HEIF Multi-Platform Fast-Path
+    if ext == "heic" || ext == "heif" {
+        #[cfg(target_os = "macos")]
+        {
+            let unique_id = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let temp_file = std::env::temp_dir().join(format!("nd_heic_{}.png", unique_id));
+
+            let status = std::process::Command::new("sips")
+                .args([
+                    "-s", "format", "png",
+                    input_path.to_str().unwrap_or(""),
+                    "--out", temp_file.to_str().unwrap_or("")
+                ])
+                .output();
+
+            if let Ok(out) = status {
+                if out.status.success() && temp_file.exists() {
+                    let img_res = image::open(&temp_file);
+                    let _ = std::fs::remove_file(&temp_file);
+                    if let Ok(img) = img_res {
+                        return Ok(img);
+                    }
+                }
+            }
+            let _ = std::fs::remove_file(&temp_file);
+        }
+
+        // Fallback for Windows / other platforms
+        if let Ok(file_data) = std::fs::read(input_path) {
+            if let Ok(img) = image::load_from_memory(&file_data) {
+                return Ok(img);
+            }
+            if let Some(embedded) = extract_largest_embedded_jpeg(&file_data) {
+                return Ok(embedded);
+            }
+        }
+
+        return Err(EngineError::DecodeFailed(
+            "Cannot decode HEIC image format on this system.".into(),
+        ));
+    }
+
+    // 2. Vector SVG
     if ext == "svg" {
         let svg_data = std::fs::read(input_path)?;
         let opt = usvg::Options::default();
@@ -155,17 +195,15 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         return Ok(DynamicImage::ImageRgba8(rgba_buf));
     }
 
-    // 2. File Camera RAW (CR2, CR3, DNG, ARW, NEF, ORF, RAF...)
+    // 3. Camera RAW (CR2, CR3, DNG, ARW, NEF, ORF, RAF...)
     let raw_extensions = ["arw", "cr2", "cr3", "crw", "dng", "nef", "orf", "pef", "raf", "rw2", "sr2", "srf"];
     if raw_extensions.contains(&ext.as_str()) {
         let file_data = std::fs::read(input_path)?;
 
-        // Priority 1: Use the embedded Full/High-Res JPEG with the camera's processed color science
         if let Some(embedded) = extract_largest_embedded_jpeg(&file_data) {
             return Ok(embedded);
         }
 
-        // Priority 2: Decode using rawloader if no embedded JPEG is present
         if let Ok(raw_image) = rawloader::decode_file(input_path) {
             if let Some(debayered) = demosaic_bayer_to_rgb(&raw_image) {
                 return Ok(debayered);
@@ -173,7 +211,7 @@ pub fn decode_any_image(input_path: &Path) -> Result<DynamicImage, EngineError> 
         }
     }
 
-    // 3. File Standard Raster (JPG, PNG, WebP, TIFF, BMP...)
+    // 4. Standard raster formats (JPG, PNG, WebP, TIFF, BMP...)
     let reader = ImageReader::open(input_path)?
         .with_guessed_format()
         .map_err(|e| EngineError::DecodeFailed(e.to_string()))?;
@@ -190,17 +228,17 @@ pub fn process_single_image(
         return Err(EngineError::FileNotFound(input_path_str.to_string()));
     }
 
-    // 1. Decode image
+    // 1. Decode
     let img = decode_any_image(input_path)?;
 
     // 2. Resize
     let resized_img = apply_resize(img, options);
 
-    // 3. Color Transform (Little-CMS 2)
+    // 3. Color Transform
     let target_color_space = options.color_space.clone().unwrap_or(TargetColorSpace::Srgb);
     let processed_img = apply_color_transform(resized_img, &target_color_space, None);
 
-    // 4. Locate the output folder and file extension
+    // 4. Locate Output Path
     let parent_dir = if let Some(ref dir) = options.output_directory {
         if !dir.trim().is_empty() {
             PathBuf::from(dir)
@@ -240,7 +278,7 @@ pub fn process_single_image(
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
 
-    // 5. Encode according to the target format
+    // 5. Encode
     match options.format {
         OutputFormat::Jpeg => {
             let file = File::create(&output_path)?;

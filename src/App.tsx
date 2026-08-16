@@ -1,8 +1,8 @@
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
 import { 
   Upload, 
@@ -29,6 +29,7 @@ import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
 import { ComparisonModal } from './components/comparison/ComparisonModal';
 import { AutomationTab } from './components/automation/AutomationTab';
 import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
+import { UpdateChecker } from './components/updater/UpdateChecker';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
@@ -62,7 +63,7 @@ export default function App() {
   
   const formatMenuRef = useRef<HTMLDivElement>(null);
 
-  // 1. Function to scan a path and add files to the list
+  // 1. Scan the path and ingest files
   const processIncomingFiles = useCallback(async (rawPaths: string[]) => {
     try {
       const scannedPaths: string[] = await invoke('scan_dropped_paths', { paths: rawPaths });
@@ -99,7 +100,7 @@ export default function App() {
     }
   }, [addFiles, updateBatchFileInfo]);
 
-  // 2. Function to open a file selection dialog
+  // 2. Open the file selection dialog
   const handleSelectFiles = useCallback(async () => {
     try {
       const selected = await open({
@@ -119,7 +120,25 @@ export default function App() {
     }
   }, [processIncomingFiles]);
 
-  // 3. Batch Convert activation function
+  // 3. Drag and drop macOS / Windows windows
+  const handleStartDragging = async (e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (
+      e.button === 0 &&
+      target &&
+      !target.closest('button') &&
+      !target.closest('input') &&
+      !target.closest('.no-drag')
+    ) {
+      try {
+        await getCurrentWindow().startDragging();
+      } catch (err) {
+        console.error('Failed to start window drag:', err);
+      }
+    }
+  };
+
+  // 4. Batch Convert
   const handleStartBatch = useCallback(async () => {
     if (files.length === 0 || isConverting) return;
 
@@ -177,24 +196,8 @@ export default function App() {
       console.error('Failed to reveal file:', e);
     }
   };
-  const handleStartDragging = async (e: React.MouseEvent<HTMLElement>) => {
-    const target = e.target as HTMLElement | null;
-    if (
-      e.button === 0 &&
-      target &&
-      !target.closest('button') &&
-      !target.closest('input') &&
-      !target.closest('.no-drag')
-    ) {
-      try {
-        await getCurrentWindow().startDragging();
-      } catch (err) {
-        console.error('Failed to start window drag:', err);
-      }
-    }
-  };
-  
-  // Close the Format popover when clicking outside
+
+  // Close popover Format
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (formatMenuRef.current && !formatMenuRef.current.contains(e.target as Node)) {
@@ -205,7 +208,7 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Listen for keyboard shortcuts
+  // Shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -224,7 +227,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSelectFiles, handleStartBatch, files.length, isConverting, clearFiles, currentTab]);
 
-  // Listen for Drag & Drop events (including dragging entire folders)
+  // Drag & Drop
   useEffect(() => {
     const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === 'over' || event.payload.type === 'enter') {
@@ -244,7 +247,7 @@ export default function App() {
     };
   }, [processIncomingFiles, currentTab]);
 
-  // Monitoring the progress of the transition
+  // Conversion Progress
   useEffect(() => {
     const unlistenPromise = listen<ProgressPayload>('conversion-progress', (event) => {
       const { filePath, outputPath, outputSize, success, error, completed, total } = event.payload;
@@ -272,7 +275,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
-      {/* Header with Native startDragging Call */}
+      {/* Header with Native Window Dragging */}
       <header
         data-tauri-drag-region
         onMouseDown={handleStartDragging}
@@ -284,7 +287,7 @@ export default function App() {
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.4.2</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.5.0</span>
         </div>
 
         {/* Center: Absolute Fixed Position Tabs */}
@@ -356,10 +359,9 @@ export default function App() {
         </div>
       </header>
 
-      {/* Dynamic Tab Body */}
+      {/* Main Body */}
       {currentTab === 'converter' ? (
         <>
-          {/* Main Workspace */}
           <main className="flex-1 relative overflow-hidden flex flex-col p-4">
             {files.length === 0 ? (
               <div
@@ -487,10 +489,10 @@ export default function App() {
             </div>
           )}
 
-          {/* Minimalist Bottom Controls */}
+          {/* Bottom Footer Controls */}
           <footer className="p-3.5 bg-[#101216]/95 border-t border-zinc-800/80 flex items-center justify-between gap-4 z-20 shrink-0">
             <div className="flex items-center gap-3 flex-wrap">
-              {/* Format Pill Popover Trigger */}
+              {/* Format Popover */}
               <div className="relative" ref={formatMenuRef}>
                 <button
                   onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}
@@ -501,7 +503,6 @@ export default function App() {
                   <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${isFormatMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Formats Grid Modal */}
                 {isFormatMenuOpen && (
                   <div className="absolute bottom-11 left-0 w-[420px] bg-[#12151b] border border-zinc-800 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
                     <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-800/80 px-1">
@@ -530,10 +531,10 @@ export default function App() {
                 )}
               </div>
 
-              {/* Quality Analyzer Pill */}
+              {/* Quality Analyzer */}
               <QualityAnalyzerPill />
 
-              {/* Resize Segmented Pill */}
+              {/* Resize Pill */}
               <div className="h-8 p-0.5 rounded-xl bg-[#171a21] border border-zinc-800 flex items-center gap-0.5 shadow-sm">
                 {(['original', 'width', 'percentage'] as ResizeMode[]).map((mode) => (
                   <button
@@ -570,7 +571,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* Output Folder Selector Pill */}
+              {/* Output Directory */}
               <button
                 onClick={handleSelectOutputFolder}
                 className="h-8 px-3 rounded-xl bg-[#171a21] hover:bg-[#1e222b] border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs font-medium flex items-center gap-2 transition cursor-pointer shadow-sm"
@@ -583,7 +584,7 @@ export default function App() {
               </button>
             </div>
 
-            {/* Action Button */}
+            {/* Action Buttons */}
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-zinc-400 font-mono">
                 {isConverting ? `${progress.completed}/${progress.total}` : `${files.length} items`}
@@ -611,9 +612,12 @@ export default function App() {
           </footer>
         </>
       ) : (
-        /* Tab Automation Workspace */
+        /* Automation Tab */
         <AutomationTab />
       )}
+
+      {/* Auto-Update Notification Banner */}
+      <UpdateChecker />
 
       {/* Comparison Modal */}
       {selectedComparisonItem && (
