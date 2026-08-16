@@ -27,8 +27,8 @@ No terminal or programming tools required. Simply download the pre-built install
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download DMG]([https://github.com/duongtruongdp/ND-ImgConverter/releases/latest](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_aarch64.dmg)) |
-| **Windows** | `.exe` (NSIS) | x64 (64-bit) | [Download Installer]([https://github.com/duongtruongdp/ND-ImgConverter/releases/latest](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_x64-setup.exe)) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download DMG](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_aarch64.dmg) |
+| **Windows** | `.exe` (NSIS) | x64 (64-bit) | [Download Installer](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_x64-setup.exe) |
 
 ### First-Time Launch Instructions
 
