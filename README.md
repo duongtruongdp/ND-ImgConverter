@@ -2,7 +2,7 @@
 
 **Blazing-fast, privacy-first, offline batch image converter & optimizer for desktop.**
 
-![Version](https://img.shields.io/badge/version-0.4.2-blue.svg)
+![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)
@@ -20,19 +20,33 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 
 ---
 
-## ✨ Features (v0.1)
+## ✨ Features (v0.5.0)
 
-- 🔒 **100% Offline & Private:** No cloud uploads, no telemetry, no tracking.
-- ⚡ **Multi-threaded Engine:** Powered by Rust and `rayon` for fast batch processing on multi-core CPUs (Apple Silicon & Intel/AMD).
-- 🖼 **Formats Supported:** Fast decoding and encoding between **JPG/JPEG**, **PNG**, and **WebP**.
-- 🎯 **Smart Resize Options:**
+- 🔒 **100% Offline & Private:** Zero cloud uploads, no telemetry, no tracking — your data stays strictly on your machine.
+
+- ⚡ **Multi-threaded Engine:** Powered by Rust and rayon for ultra-fast batch conversions utilizing full multi-core CPU capabilities (Apple Silicon M-Series & Intel/AMD).
+
+- 🖼 **Massive Format Support (50+ In / 19 Out):**
+  - Standard Formats: JPEG, PNG, WebP, AVIF, BMP, ICO, ICNS, TIFF, TGA, GIF, SVG, PSD, EXR, and more.
+  - Camera RAW & DNG: Native decoding for Canon (.CR2, .CR3), Adobe (.DNG), Sony (.ARW), Nikon (.NEF), and other major camera profiles with accurate CFA Bayer demosaicing and embedded preview extraction.
+  - Optimized HEIC/HEIF: High-speed decoding via native macOS hardware acceleration and cross-platform memory pipelines.
+
+- 🎨 **Pro Color Management (Little-CMS 2):** Built-in color space transforms with Rec.709, sRGB, Display P3, and Adobe RGB color profiles.
+
+- 📊 **Real-time Quality Analyzer:** Dynamic bitrate and file-size estimation based on megapixel density and compression curves before exporting.
+  
+- 🎯 **Flexible Resize Engine:**
   - Original dimensions
   - Fixed Width (with aspect-ratio preservation)
   - Percentage Scaling
-- 🎚 **Precision Quality Control:** Fine-tune compression ratio for JPEG and WebP.
-- 🚀 **Fast Async Metadata & Thumbnails:** Instant thumbnail previews even when dropping dozens of 4K images.
-- 📂 **Flexible Output Management:** Save next to source files or select a custom output directory.
-- 🖥 **Native macOS Experience:** Frameless window design with system traffic lights, drag-and-drop, and Finder integration.
+
+- 👁 **Before/After Split Comparison:** Interactive side-by-side visual inspector to preview compression quality differences instantly.
+
+- 🤖 **Automated Folder Watcher:** Background automation mode that detects new incoming files and converts them on the fly.
+
+- 🔔 **GitHub Auto-Update Checker:** In-app notification alerts for new release tags and direct download links.
+
+- 📂 **Smart Ingestion & Output:** Drag-and-drop entire nested folders with recursive scanning, plus one-click "Reveal in Finder/Explorer".
 
 ---
 
@@ -118,7 +132,7 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 
 [x] v0.4: Live Watch Folder automation, ICC color management, instant output size estimation, and pixel-level comparison inspection.
 
-[ ] v0.5:
+[x] v0.5: Integrate GitHub auto-update checker, optimize HEIC fast-path decoding, and polish installer branding.
 
 [ ] v1.0:
 
