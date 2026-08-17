@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
-import { open } from '@tauri-apps/plugin-shell';
 import { Sparkles, Download, X } from 'lucide-react';
 
-const GITHUB_REPO = 'duongtruongdp/nd-image-converter';
+const GITHUB_REPO = 'duongtruongdp/ND-ImgConverter';
 
 export const UpdateChecker = () => {
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
@@ -13,10 +12,10 @@ export const UpdateChecker = () => {
   useEffect(() => {
     const checkUpdate = async () => {
       try {
-        // 1. Get the current version of the running app
+        // 1. Get the current version of the running application.
         const currentVersion = await getVersion();
 
-        // 2. Retrieve the list of releases (including pre-releases)
+        // 2. GitHub API to get the latest release.
         const response = await fetch(
           `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`,
           {
@@ -27,6 +26,7 @@ export const UpdateChecker = () => {
         );
 
         if (!response.ok) return;
+
         const releases = await response.json();
         if (!Array.isArray(releases) || releases.length === 0) return;
 
@@ -34,7 +34,7 @@ export const UpdateChecker = () => {
         const tag = (latestRelease.tag_name || '').replace(/^v/, '');
         const cleanCurrent = currentVersion.replace(/^v/, '');
 
-        // 3. Comparing SemVer versions accurately
+        // 3. Compare using the SemVer standard (only show notification when the new tag is greater than the current version)
         const isNewer =
           tag.localeCompare(cleanCurrent, undefined, {
             numeric: true,
@@ -54,18 +54,15 @@ export const UpdateChecker = () => {
       }
     };
 
-    checkUpdate();
+    // Wait 800ms after the app finishes launching before calling the check
+    const timer = setTimeout(checkUpdate, 800);
+    return () => clearTimeout(timer);
   }, []);
 
   if (!isOpen || !latestVersion) return null;
 
-  const handleOpenRelease = async () => {
-    try {
-      // Open the system's default browser using the Tauri Shell plugin
-      await open(releaseUrl);
-    } catch {
-      window.open(releaseUrl, '_blank');
-    }
+  const handleOpenRelease = () => {
+    window.open(releaseUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
