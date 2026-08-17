@@ -40,7 +40,8 @@ resvg = "0.45"
 usvg = "0.45"
 rawloader = "0.37"
 heic = { version = "0.1", default-features = false, features = ["std"] }
-
+imageproc = "0.25"
+rusttype = "0.9"
 # 1. Folder Automation / File System Watcher
 notify = "6.1"
 notify-debouncer-mini = "0.4"
