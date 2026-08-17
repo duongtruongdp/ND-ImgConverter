@@ -1,3 +1,4 @@
+mod watermark;
 mod engine;
 mod errors;
 mod models;

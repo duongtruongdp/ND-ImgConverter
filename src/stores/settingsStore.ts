@@ -1,5 +1,27 @@
 import { create } from 'zustand';
-import { ConversionSettings, OutputFormat, ResizeMode } from '../types/conversion';
+import { persist } from 'zustand/middleware';
+import { OutputFormat, ResizeMode } from '../types/conversion';
+
+export type WatermarkPosition =
+  | 'TopLeft'
+  | 'TopCenter'
+  | 'TopRight'
+  | 'CenterLeft'
+  | 'Center'
+  | 'CenterRight'
+  | 'BottomLeft'
+  | 'BottomCenter'
+  | 'BottomRight';
+
+export interface WatermarkConfig {
+  enabled: boolean;
+  isText: boolean;
+  textContent: string;
+  imagePath: string | null;
+  position: WatermarkPosition;
+  opacity: number;
+  scalePercent: number;
+}
 
 export interface Preset {
   id: string;
@@ -12,76 +34,86 @@ export interface Preset {
 }
 
 export const DEFAULT_PRESETS: Preset[] = [
-  {
-    id: 'web-optimized',
-    name: 'Web Optimized',
-    format: 'webp',
-    quality: 80,
-    resizeMode: 'width',
-    targetWidth: 1920,
-  },
-  {
-    id: 'thumbnails',
-    name: 'Thumbnails',
-    format: 'webp',
-    quality: 75,
-    resizeMode: 'width',
-    targetWidth: 400,
-  },
-  {
-    id: 'lossless-png',
-    name: 'Lossless PNG',
-    format: 'png',
-    quality: 100,
-    resizeMode: 'original',
-  },
-  {
-    id: 'social-jpeg',
-    name: 'Social JPEG',
-    format: 'jpeg',
-    quality: 85,
-    resizeMode: 'width',
-    targetWidth: 2048,
-  },
+  { id: 'web-optimized', name: 'Web Opt', format: 'webp', quality: 80, resizeMode: 'original' },
+  { id: 'hd-share', name: 'HD Share', format: 'jpeg', quality: 85, resizeMode: 'width', targetWidth: 1920 },
+  { id: 'lossless-png', name: 'PNG Max', format: 'png', quality: 100, resizeMode: 'original' },
 ];
 
-interface SettingsState extends ConversionSettings {
+export interface ConversionSettings {
+  format: OutputFormat;
+  quality: number;
+  resizeMode: ResizeMode;
+  targetWidth?: number;
+  scalePercentage?: number;
+  maintainAspectRatio: boolean;
+  outputDirectory: string | null;
+  colorSpace: string;
   activePresetId: string | null;
+  stripMetadata: boolean;
+  watermark: WatermarkConfig;
+}
+
+export interface SettingsState extends ConversionSettings {
   setFormat: (format: OutputFormat) => void;
   setQuality: (quality: number) => void;
   setResizeMode: (mode: ResizeMode) => void;
   setTargetWidth: (width?: number) => void;
   setScalePercentage: (scale?: number) => void;
   setMaintainAspectRatio: (maintain: boolean) => void;
-  setOutputDirectory: (dir: string) => void;
+  setOutputDirectory: (dir: string | null) => void;
+  setColorSpace: (cs: string) => void;
   applyPreset: (preset: Preset) => void;
+  setStripMetadata: (strip: boolean) => void;
+  setWatermark: (watermark: WatermarkConfig) => void;
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
-  format: 'webp',
-  quality: 85,
-  resizeMode: 'original',
-  targetWidth: 1920,
-  scalePercentage: 80,
-  maintainAspectRatio: true,
-  outputDirectory: '',
-  activePresetId: null,
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set) => ({
+      format: 'webp',
+      quality: 85,
+      resizeMode: 'original',
+      targetWidth: undefined,
+      scalePercentage: undefined,
+      maintainAspectRatio: true,
+      outputDirectory: null,
+      colorSpace: 'srgb',
+      activePresetId: null,
 
-  setFormat: (format) => set({ format, activePresetId: null }),
-  setQuality: (quality) => set({ quality, activePresetId: null }),
-  setResizeMode: (resizeMode) => set({ resizeMode, activePresetId: null }),
-  setTargetWidth: (targetWidth) => set({ targetWidth, activePresetId: null }),
-  setScalePercentage: (scalePercentage) => set({ scalePercentage, activePresetId: null }),
-  setMaintainAspectRatio: (maintainAspectRatio) => set({ maintainAspectRatio }),
-  setOutputDirectory: (outputDirectory) => set({ outputDirectory }),
+      stripMetadata: true,
+      watermark: {
+        enabled: false,
+        isText: true,
+        textContent: '© 2026 ND ImgConverter',
+        imagePath: null,
+        position: 'BottomRight',
+        opacity: 0.8,
+        scalePercent: 15,
+      },
 
-  applyPreset: (preset) =>
-    set({
-      format: preset.format,
-      quality: preset.quality,
-      resizeMode: preset.resizeMode,
-      targetWidth: preset.targetWidth,
-      scalePercentage: preset.scalePercentage,
-      activePresetId: preset.id,
+      setFormat: (format) => set({ format, activePresetId: null }),
+      setQuality: (quality) => set({ quality, activePresetId: null }),
+      setResizeMode: (resizeMode) => set({ resizeMode, activePresetId: null }),
+      setTargetWidth: (targetWidth) => set({ targetWidth, activePresetId: null }),
+      setScalePercentage: (scalePercentage) => set({ scalePercentage, activePresetId: null }),
+      setMaintainAspectRatio: (maintainAspectRatio) => set({ maintainAspectRatio }),
+      setOutputDirectory: (outputDirectory) => set({ outputDirectory }),
+      setColorSpace: (colorSpace) => set({ colorSpace }),
+      applyPreset: (preset) =>
+        set({
+          format: preset.format,
+          quality: preset.quality,
+          resizeMode: preset.resizeMode,
+          targetWidth: preset.targetWidth,
+          scalePercentage: preset.scalePercentage,
+          activePresetId: preset.id,
+        }),
+
+      setStripMetadata: (stripMetadata: boolean) => set({ stripMetadata }),
+      setWatermark: (watermark: WatermarkConfig) => set({ watermark }),
     }),
-}));
+    {
+      name: 'nd-image-converter-settings',
+    }
+  )
+);

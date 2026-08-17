@@ -76,13 +76,14 @@ pub enum ResizeMode {
 pub struct ConversionOptions {
     pub format: OutputFormat,
     pub quality: u8,
-    pub resize_mode: ResizeMode,
+    pub resize_mode: Option<ResizeMode>,
     pub target_width: Option<u32>,
     pub scale_percentage: Option<u32>,
-    pub maintain_aspect_ratio: bool,
+    pub maintain_aspect_ratio: Option<bool>,
     pub output_directory: Option<String>,
     pub color_space: Option<TargetColorSpace>,
-    pub metadata: Option<MetadataSettings>,
+    pub strip_metadata: Option<bool>,
+    pub watermark: Option<crate::watermark::WatermarkConfig>,
 }
 
 #[derive(Debug, Serialize, Clone)]

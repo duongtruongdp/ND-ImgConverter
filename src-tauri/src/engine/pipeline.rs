@@ -50,7 +50,7 @@ pub fn estimate_single_file_size(
         OutputFormat::Png => ((pixels * 1.5) / 8.0) as u64,
         OutputFormat::Bmp => (pixels * 3.0) as u64 + 54,
         OutputFormat::Tiff => (pixels * 3.0) as u64 + 1024,
-        _ => ((pixels * 0.35) as u64),
+        _ => (pixels * 0.35) as u64,
     }
 }
 
@@ -229,16 +229,23 @@ pub fn process_single_image(
     }
 
     // 1. Decode
-    let img = decode_any_image(input_path)?;
+    let mut current_img = decode_any_image(input_path)?;
 
-    // 2. Resize
-    let resized_img = apply_resize(img, options);
+    // 2. Watermark Overlay
+    if let Some(ref wm_config) = options.watermark {
+        if wm_config.enabled {
+            let _ = crate::watermark::apply_watermark(&mut current_img, wm_config);
+        }
+    }
 
-    // 3. Color Transform
+    // 3. Resize
+    let resized_img = apply_resize(current_img, options);
+
+    // 4. Color Transform
     let target_color_space = options.color_space.clone().unwrap_or(TargetColorSpace::Srgb);
     let processed_img = apply_color_transform(resized_img, &target_color_space, None);
 
-    // 4. Locate Output Path
+    // 5. Locate the file storage path
     let parent_dir = if let Some(ref dir) = options.output_directory {
         if !dir.trim().is_empty() {
             PathBuf::from(dir)
@@ -278,7 +285,7 @@ pub fn process_single_image(
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
 
-    // 5. Encode
+    // 6. Encode
     match options.format {
         OutputFormat::Jpeg => {
             let file = File::create(&output_path)?;
