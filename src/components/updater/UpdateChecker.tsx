@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
+import { open } from '@tauri-apps/plugin-shell';
 import { Sparkles, Download, X } from 'lucide-react';
 
-const CURRENT_VERSION = '0.5.0';
 const GITHUB_REPO = 'duongtruongdp/nd-image-converter';
 
 export const UpdateChecker = () => {
@@ -12,14 +13,40 @@ export const UpdateChecker = () => {
   useEffect(() => {
     const checkUpdate = async () => {
       try {
-        const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
-        if (!response.ok) return;
-        const data = await response.json();
-        const tag = (data.tag_name || '').replace(/^v/, '');
+        // 1. Get the current version of the running app
+        const currentVersion = await getVersion();
 
-        if (tag && tag !== CURRENT_VERSION) {
+        // 2. Retrieve the list of releases (including pre-releases)
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`,
+          {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+            },
+          }
+        );
+
+        if (!response.ok) return;
+        const releases = await response.json();
+        if (!Array.isArray(releases) || releases.length === 0) return;
+
+        const latestRelease = releases[0];
+        const tag = (latestRelease.tag_name || '').replace(/^v/, '');
+        const cleanCurrent = currentVersion.replace(/^v/, '');
+
+        // 3. Comparing SemVer versions accurately
+        const isNewer =
+          tag.localeCompare(cleanCurrent, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+          }) > 0;
+
+        if (isNewer) {
           setLatestVersion(tag);
-          setReleaseUrl(data.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`);
+          setReleaseUrl(
+            latestRelease.html_url ||
+              `https://github.com/${GITHUB_REPO}/releases`
+          );
           setIsOpen(true);
         }
       } catch (err) {
@@ -32,12 +59,17 @@ export const UpdateChecker = () => {
 
   if (!isOpen || !latestVersion) return null;
 
-  const handleOpenRelease = () => {
-    window.open(releaseUrl, '_blank');
+  const handleOpenRelease = async () => {
+    try {
+      // Open the system's default browser using the Tauri Shell plugin
+      await open(releaseUrl);
+    } catch {
+      window.open(releaseUrl, '_blank');
+    }
   };
 
   return (
-    <div className="fixed top-14 right-6 bg-[#161a23] border border-blue-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in slide-in-from-top-3 duration-300 max-w-sm">
+    <div className="fixed top-14 right-6 bg-[#161a23] border border-blue-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in slide-in-from-top-3 duration-300 max-w-sm select-none">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400">
@@ -46,7 +78,7 @@ export const UpdateChecker = () => {
           <div>
             <h4 className="text-xs font-semibold text-zinc-100">Update Available</h4>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Version <span className="font-mono text-blue-400 font-medium">v{latestVersion}</span> is now available on GitHub.
+              Version <span className="font-mono text-blue-400 font-medium">v{latestVersion}</span> is ready to download.
             </p>
           </div>
         </div>
