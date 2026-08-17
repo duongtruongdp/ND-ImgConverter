@@ -2,7 +2,7 @@
 
 **Blazing-fast, privacy-first, offline batch image converter & optimizer for desktop.**
 
-![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)
@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.5.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.6.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
   </a>
 </p>
 
@@ -27,8 +27,9 @@ No terminal or programming tools required. Simply download the pre-built install
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download DMG](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_aarch64.dmg) |
-| **Windows** | `.exe` (NSIS) | x64 (64-bit) | [Download Installer](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.5.0/ND.Image.Converter_0.5.0_x64-setup.exe) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download .dmg](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.0/ND.Image.Converter_0.6.0_universal.dmg) |
+| **Windows** | `.exe` | x64 (64-bit) | [Download .exe](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.0/ND.Image.Converter_0.6.0_x64-setup.exe) |
+| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download .deb](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.0/ND.Image.Converter_0.6.0_amd64.deb) |
 
 ### First-Time Launch Instructions
 
@@ -52,7 +53,7 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 
 ---
 
-## ✨ Features (v0.5.0)
+## ✨ Features (v0.6.0)
 
 - 🔒 **100% Offline & Private:** Zero cloud uploads, no telemetry, no tracking — your files never leave your device.
 - ⚡ **High-Throughput Multi-threaded Engine:** Powered by Rust and `rayon` to utilize all CPU cores on both Apple Silicon and Intel/AMD processors.
@@ -60,6 +61,7 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
   - **Standard Formats:** JPEG, PNG, WebP, AVIF, BMP, ICO, ICNS, TIFF, TGA, GIF, SVG, PSD, EXR, and more.
   - **Camera RAW & DNG:** Native decoding for Canon (.CR2, .CR3), Adobe (.DNG), Sony (.ARW), Nikon (.NEF), and other major camera brands with accurate Bayer demosaicing.
   - **Optimized HEIC/HEIF:** Direct hardware-accelerated decoding pipelines for instant mobile photo conversions.
+- 🛡 **Zero-Overhead EXIF & Metadata Stripper:** One-click toggle to strip camera parameters, thumbnails, and GPS location tags for maximum privacy and ultra-compact file sizes.
 - 🎨 **Pro Color Management (Little-CMS 2):** Built-in color profile transforms supporting Rec.709, sRGB, Display P3, and Adobe RGB.
 - 📊 **Real-time Quality Analyzer:** Dynamic bitrate and target file-size estimation before conversion.
 - 🎯 **Flexible Resize Modes:**
@@ -158,7 +160,7 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 
 [x] v0.5: Integrate GitHub auto-update checker, optimize HEIC fast-path decoding, and polish installer branding.
 
-[ ] v0.6: Custom Image/Text Watermark Engine & Batch Keyword Tagging (IPTC/XMP/EXIF).
+[x] v0.6: Watermark Engine, EXIF Stripper, and Linux Build Pipeline
 
 [ ] v1.0: Stable milestone release with full cross-platform parity.
 
