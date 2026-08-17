@@ -1,9 +1,9 @@
-name: "Release App"
+name: Release App
 
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
   release:
@@ -13,69 +13,59 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin"
-          - platform: "windows-latest"
-            args: ""
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+          - platform: 'ubuntu-22.04'
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
+          cache: 'npm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Install dependencies (Ubuntu only if needed)
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # Install all required dependencies for Linux packaging (.deb & .AppImage)
+      - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build Tauri App & Create Release
+      - name: Build Tauri application
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "ND Image Converter ${{ github.ref_name }}"
+          releaseName: 'ND Image Converter ${{ github.ref_name }}'
+          releaseBody: 'See changelog for detailed release notes.'
           releaseDraft: false
-          releasePrerelease: false
+          prerelease: false
           args: ${{ matrix.args }}
-          body: |
-            ### 🔒 Privacy & Security Notice
-            **ND Image Converter is 100% open-source, safe, and contains NO malware or telemetry.**
-            Because the app is not code-signed with expensive Apple Developer or Microsoft certificates, your operating system may show a security prompt upon first launch.
-
-            ---
-
-            ### 🍏 macOS Installation Guide
-            If macOS displays an error like *"App is damaged and can't be opened"* or blocks the app via Gatekeeper:
-            1. Drag **ND Image Converter** into your `/Applications` folder.
-            2. Open **Terminal** and run the following command to remove the quarantine flag:
-            ```bash
-            sudo xattr -cr /Applications/ND\ Image\ Converter.app
-            ```
-            3. Enter your Mac password when prompted, then open the app normally.
-            > *Alternative:* Right-click the app in Finder $\rightarrow$ Select **Open** $\rightarrow$ Click **Open** in the confirmation dialog.
-
-            ---
-
-            ### 🪟 Windows Installation Guide
-            If Windows SmartScreen displays *"Windows protected your PC"*:
-            1. Click **More info**.
-            2. Click **Run anyway**.
-            3. *(If required)* Right-click the installer/app and choose **Run as administrator**.
-
-            ---
-            *All conversions are processed 100% locally on your machine.*
