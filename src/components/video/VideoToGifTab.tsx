@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Film, FolderOpen, Play, Download, Loader2 } from 'lucide-react';
 
@@ -19,14 +20,28 @@ export const VideoToGifTab = () => {
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const chooseVideo = async () => {
-    const selected = await open({ multiple: false, filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'] }] });
-    if (!selected || typeof selected !== 'string') return;
+  const loadVideo = async (selected: string) => {
     setError(null); setResult(null);
     try {
       const info = await invoke<VideoInfo>('probe_video', { path: selected });
       setVideo(info); setInPoint(0); setOutPoint(info.duration); setWidth(Math.min(1280, info.width));
     } catch (e) { setError(String(e)); }
+  };
+
+  useEffect(() => {
+    const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'drop') {
+        const candidate = event.payload.paths.find((path) => /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(path));
+        if (candidate) void loadVideo(candidate);
+      }
+    });
+    return () => { unlistenPromise.then((unlisten) => unlisten()); };
+  }, []);
+
+  const chooseVideo = async () => {
+    const selected = await open({ multiple: false, filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'] }] });
+    if (!selected || typeof selected !== 'string') return;
+    await loadVideo(selected);
   };
 
   const exportGif = async () => {

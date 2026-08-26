@@ -5,7 +5,11 @@ use std::process::Command;
 #[derive(Debug, Serialize)]#[serde(rename_all="camelCase")] pub struct VideoInfo { pub path: String, pub duration: f64, pub width: u32, pub height: u32, pub codec: String }
 #[derive(Debug, Deserialize)]#[serde(rename_all="camelCase")] pub struct GifOptions { pub input_path: String, pub in_point: f64, pub out_point: f64, pub width: u32, pub fps: u32, pub quality: u8, pub output_directory: Option<String> }
 
-fn tool(name: &str) -> String { std::env::var(format!("ND_{}", name.to_uppercase())).unwrap_or_else(|_| name.into()) }
+fn tool(name: &str) -> String {
+  if let Ok(custom) = std::env::var(format!("ND_{}", name.to_uppercase())) { return custom; }
+  let candidates = if name == "ffmpeg" { vec!["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "ffmpeg"] } else { vec!["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "ffprobe"] };
+  candidates.into_iter().find(|path| *path == name || Path::new(path).is_file()).unwrap_or(name).into()
+}
 pub fn probe(path: &str) -> Result<VideoInfo, String> {
   let out = Command::new(tool("ffprobe")).args(["-v","error","-select_streams","v:0","-show_entries","stream=codec_name,width,height,duration","-of","json",path]).output().map_err(|e| format!("ffprobe unavailable: {e}"))?;
   if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().to_string()); }
