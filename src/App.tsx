@@ -31,6 +31,7 @@ import { AutomationTab } from './components/automation/AutomationTab';
 import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
 import { UpdateChecker } from './components/updater/UpdateChecker';
 import { VideoToGifTab } from './components/video/VideoToGifTab';
+import { VideoConverterTab } from './components/video/VideoConverterTab';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
@@ -55,7 +56,7 @@ export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
   const settings = useSettingsStore();
   
-  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video'>('converter');
+  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter'>('converter');
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
@@ -320,6 +321,7 @@ export default function App() {
             >
               <Activity className="w-3.5 h-3.5" /> Video to GIF
             </button>
+            <button onClick={() => setCurrentTab('video-converter')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-converter' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><ArrowRight className="w-3.5 h-3.5" /> Video Convert</button>
           </div>
         </div>
 
@@ -367,7 +369,7 @@ export default function App() {
       </header>
 
       {/* Main Body */}
-      {currentTab === 'video' ? <VideoToGifTab /> : currentTab === 'converter' ? (
+      {currentTab === 'video-converter' ? <VideoConverterTab /> : currentTab === 'video' ? <VideoToGifTab /> : currentTab === 'converter' ? (
         <>
           <main className="flex-1 relative overflow-hidden flex flex-col p-4">
             {files.length === 0 ? (
