@@ -34,7 +34,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": ["binaries/ffmpeg", "binaries/ffprobe"],
+    "resources": ["binaries/ffmpeg", "binaries/ffprobe", "binaries/lib"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

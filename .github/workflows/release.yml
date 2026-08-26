@@ -75,6 +75,43 @@ jobs:
             chmod +x src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe
           fi
 
+      - name: Bundle macOS FFmpeg dependencies
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries/lib
+          for binary in src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe; do
+            while read -r dependency; do
+              case "$dependency" in
+                /opt/homebrew/*|/usr/local/*)
+                  library="${dependency%% *}"
+                  destination="src-tauri/binaries/lib/$(basename "$library")"
+                  if [ ! -f "$destination" ]; then
+                    cp "$library" "$destination"
+                    chmod +x "$destination"
+                    install_name_tool -id "@loader_path/$(basename "$destination")" "$destination" || true
+                  fi
+                  install_name_tool -change "$library" "@loader_path/lib/$(basename "$destination")" "$binary" || true
+                  ;;
+              esac
+            done < <(otool -L "$binary" | tail -n +2)
+          done
+          for pass in 1 2 3 4 5; do
+            for library in src-tauri/binaries/lib/*.dylib; do
+              [ -f "$library" ] || continue
+              while read -r dependency; do
+              case "$dependency" in
+                /opt/homebrew/*|/usr/local/*)
+                  dependency_path="${dependency%% *}"
+                  dependency_name="$(basename "$dependency_path")"
+                  destination="src-tauri/binaries/lib/$dependency_name"
+                  if [ ! -f "$destination" ]; then cp "$dependency_path" "$destination"; chmod +x "$destination"; install_name_tool -id "@loader_path/$dependency_name" "$destination" || true; fi
+                  install_name_tool -change "$dependency_path" "@loader_path/$dependency_name" "$library" || true
+                  ;;
+              esac
+              done < <(otool -L "$library" | tail -n +2)
+            done
+          done
       - name: Install frontend dependencies
         run: npm install
 
