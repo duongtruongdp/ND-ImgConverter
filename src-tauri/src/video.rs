@@ -7,6 +7,11 @@ use std::process::Command;
 
 fn tool(name: &str) -> String {
   if let Ok(custom) = std::env::var(format!("ND_{}", name.to_uppercase())) { return custom; }
+  let bundled = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| {
+    let resource_dir = if cfg!(target_os = "macos") { dir.join("../Resources") } else { dir.join("resources") };
+    resource_dir.join("binaries").join(name)
+  }));
+  if let Some(path) = bundled.filter(|path| path.is_file()) { return path.to_string_lossy().into(); }
   let candidates = if name == "ffmpeg" { vec!["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "ffmpeg"] } else { vec!["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "ffprobe"] };
   candidates.into_iter().find(|path| *path == name || Path::new(path).is_file()).unwrap_or(name).into()
 }

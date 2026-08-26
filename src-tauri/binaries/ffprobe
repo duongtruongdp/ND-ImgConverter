@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "${ND_FFPROBE_SYSTEM:-ffprobe}" "$@"
