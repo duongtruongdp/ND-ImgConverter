@@ -4,6 +4,7 @@ All notable changes and feature releases for **ND Image Converter** are document
 
 ## [v0.8.0] - Native Output Folder Picker
 
+* Added Video Conversion with MP4/MOV/WEBM input/output support.
 * Replaced manual output path text fields with native folder pickers in Video to GIF and Video Converter.
 * Added custom dark-theme dropdowns for video output format and codec selection.
 * Bumped application metadata and packaging version to v0.8.0.
@@ -17,7 +18,6 @@ All notable changes and feature releases for **ND Image Converter** are document
 * Added drag-and-drop video ingestion, local preview and bundled FFmpeg/FFprobe resources in release builds.
 * Added macOS Apple Silicon/Intel, Windows x64 and Linux x64 release targets.
 
-## [v0.6.3] - Updater Browser Launch Fix
 ## [v0.6.3] - Updater Browser Launch Fix
 
 * Open release links through Tauri's native opener plugin so the system browser launches reliably on macOS and Windows.
