@@ -240,6 +240,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             is_cancelled: Arc::new(AtomicBool::new(false)),
             watcher_state: FolderWatcherState::new(),

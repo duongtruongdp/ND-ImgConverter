@@ -2,6 +2,10 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.6.3] - Updater Browser Launch Fix
+
+* Open release links through Tauri's native opener plugin so the system browser launches reliably on macOS and Windows.
+
 ## [v0.6.2] - macOS Packaging Fix
 
 * Force Little-CMS2 to link statically in release builds so packaged macOS apps do not depend on the builder's Homebrew installation.

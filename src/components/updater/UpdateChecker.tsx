@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { Sparkles, Download, X } from 'lucide-react';
 
 const GITHUB_REPO = 'duongtruongdp/ND-ImgConverter';
@@ -61,8 +62,13 @@ export const UpdateChecker = () => {
 
   if (!isOpen || !latestVersion) return null;
 
-  const handleOpenRelease = () => {
-    window.open(releaseUrl, '_blank', 'noopener,noreferrer');
+  const handleOpenRelease = async () => {
+    try {
+      await openUrl(releaseUrl);
+      setIsOpen(false);
+    } catch (err) {
+      console.error('Failed to open release page:', err);
+    }
   };
 
   return (
