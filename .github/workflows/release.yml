@@ -124,9 +124,9 @@ jobs:
           tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
           releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || github.ref_name }}"
           releaseDraft: false
-          releasePrerelease: false
+          prerelease: false
           args: ${{ matrix.args }}
-          body: |
+          releaseBody: |
             ### 🔒 Privacy & Security Notice
             **ND Image Converter is 100% open-source, safe, and contains NO malware or telemetry.**
             Because the app is not code-signed with expensive Apple Developer or Microsoft certificates, your operating system may show a security prompt upon first launch.

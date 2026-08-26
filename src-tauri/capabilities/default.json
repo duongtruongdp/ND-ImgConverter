@@ -9,6 +9,6 @@
     "core:window:allow-start-dragging",
     "dialog:default",
     "fs:default",
-    "opener:default"
+    "opener:allow-open-url"
   ]
 }
