@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to build (for example v0.7.0)'
+        required: true
+        default: 'v0.7.0'
 
 jobs:
   release:
@@ -13,14 +19,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-<<<<<<< HEAD
-          - platform: 'macos-latest'
-            args: '--target universal-apple-darwin'
-          - platform: 'windows-latest'
-            args: ''
-          - platform: 'ubuntu-22.04'
-            args: ''
-=======
           - platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
             target: "aarch64-apple-darwin"
@@ -33,7 +31,6 @@ jobs:
           - platform: "ubuntu-22.04"
             args: ""
             target: "x86_64-unknown-linux-gnu"
->>>>>>> origin/dev
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -49,28 +46,6 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-<<<<<<< HEAD
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      # Install all required dependencies for Linux packaging (.deb & .AppImage)
-      - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libsoup-3.0-dev
-=======
           targets: ${{ matrix.target }}
 
       - name: Install FFmpeg (macOS)
@@ -100,7 +75,6 @@ jobs:
             cp "$(command -v ffprobe)" src-tauri/binaries/ffprobe
             chmod +x src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe
           fi
->>>>>>> origin/dev
 
       - name: Install frontend dependencies
         run: npm ci
@@ -114,8 +88,8 @@ jobs:
           # the shipped app crashes on machines without Homebrew.
           LCMS2_STATIC: '1'
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'ND Image Converter ${{ github.ref_name }}'
+          tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
+          releaseName: 'ND Image Converter ${{ github.event.inputs.release_tag || github.ref_name }}'
           releaseBody: 'See changelog for detailed release notes.'
           releaseDraft: false
           prerelease: false
