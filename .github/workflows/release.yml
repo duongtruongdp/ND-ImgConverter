@@ -76,6 +76,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LCMS2_STATIC: '1'
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "ND Image Converter ${{ github.ref_name }}"
