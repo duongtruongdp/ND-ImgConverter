@@ -65,7 +65,7 @@ jobs:
       - name: Bundle FFmpeg binaries
         shell: bash
         run: |
-          mkdir -p src-tauri/binaries
+          mkdir -p src-tauri/binaries/lib
           if [ "${{ runner.os }}" = "Windows" ]; then
             cp "$(cygpath "$(where.exe ffmpeg | head -1)")" src-tauri/binaries/ffmpeg
             cp "$(cygpath "$(where.exe ffprobe | head -1)")" src-tauri/binaries/ffprobe
