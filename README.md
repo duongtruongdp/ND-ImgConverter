@@ -1,8 +1,8 @@
 # ND Image Converter
 
-**Blazing-fast, privacy-first, offline batch image converter & optimizer for desktop.**
+**Blazing-fast, privacy-first, offline batch media converter & optimizer for desktop.**
 
-![Version](https://img.shields.io/badge/version-0.6.3-blue.svg)
+![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)
@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.6.3)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.8.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
   </a>
 </p>
 
@@ -27,9 +27,9 @@ No terminal or programming tools required. Simply download the pre-built install
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download .dmg](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.3/ND.Image.Converter_0.6.3_universal.dmg) |
-| **Windows** | `.exe` | x64 (64-bit) | [Download .exe](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.3/ND.Image.Converter_0.6.3_x64-setup.exe) |
-| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download .deb](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.3/ND.Image.Converter_0.6.3_amd64.deb) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download .dmg](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.8.0/ND.Image.Converter_0.8.0_aarch64.dmg) |
+| **Windows** | `.exe` | x64 (64-bit) | [Download .exe](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.8.0/ND.Image.Converter_0.8.0_x64-setup.exe) |
+| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download .deb](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.8.0/ND.Image.Converter_0.8.0_amd64.deb) |
 
 ### First-Time Launch Instructions
 
@@ -53,10 +53,10 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 
 ---
 
-## ✨ Features (v0.6.0)
+## ✨ Features
 
-- 🔒 **100% Offline & Private:** Zero cloud uploads, no telemetry, no tracking — your files never leave your device.
-- ⚡ **High-Throughput Multi-threaded Engine:** Powered by Rust and `rayon` to utilize all CPU cores on both Apple Silicon and Intel/AMD processors.
+- 🔒**Privacy-first offline processing** — All files are processed locally. No uploads, telemetry, or tracking.
+- ⚡ **High-performance native engine** — Rust-based processing with multi-threaded execution for fast batch conversion.
 - 🖼 **Massive Format Support (50+ In / 19 Out):**
   - **Standard Formats:** JPEG, PNG, WebP, AVIF, BMP, ICO, ICNS, TIFF, TGA, GIF, SVG, PSD, EXR, and more.
   - **Camera RAW & DNG:** Native decoding for Canon (.CR2, .CR3), Adobe (.DNG), Sony (.ARW), Nikon (.NEF), and other major camera brands with accurate Bayer demosaicing.
@@ -72,6 +72,15 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 - 🤖 **Automated Watch Folder:** Background directory monitoring that converts new incoming files on the fly.
 - 🔔 **In-App Auto-Update Checker:** Alerts you directly when new GitHub releases are available.
 - 📂 **Recursive Directory Ingestion:** Drag-and-drop nested folders with one-click "Reveal in Finder / Explorer".
+
+✨ Video Tools
+- Video to GIF conversion — Convert H.264/H.265 MP4, MOV, MKV, WebM, AVI, and M4V videos into GIF.
+- Editor-style trimming — Set precise in/out points using an integrated playback timeline.
+- Custom GIF settings — Configure output width, frame rate, and quality.
+- Video format conversion — Convert between MP4, MOV, MKV, and WebM containers.
+- Multiple video codecs — Supports H.264, H.265, VP8, VP9, and AV1.
+- Audio preservation — Choose whether to retain the original audio track.
+- Bundled FFmpeg runtime — Release builds include the required FFmpeg and FFprobe components for offline processing.
 
 ---
 
@@ -160,7 +169,11 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 
 [x] v0.5: Integrate GitHub auto-update checker, optimize HEIC fast-path decoding, and polish installer branding.
 
-[x] v0.6: Watermark Engine, EXIF Stripper, and Linux Build Pipeline
+[x] v0.6: Watermark Engine, EXIF Stripper, and Linux Build Pipeline.
+
+[x] v0.7: Added Video to GIF conversion with MP4/MOV/MKV/WebM input support.
+
+[x] v0.8: Added Video Conversion with MP4/MOV/WEBM input/output support.
 
 [ ] v1.0: Stable milestone release with full cross-platform parity.
 
