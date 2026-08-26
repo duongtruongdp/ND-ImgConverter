@@ -295,7 +295,7 @@ export default function App() {
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.6.1</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.6.2</span>
         </div>
 
         {/* Center: Absolute Fixed Position Tabs */}

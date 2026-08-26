@@ -2,6 +2,10 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.6.2] - macOS Packaging Fix
+
+* Force Little-CMS2 to link statically in release builds so packaged macOS apps do not depend on the builder's Homebrew installation.
+
 ---
 
 ## [v0.4.0] - Pro Suite & Automation Update 🚀

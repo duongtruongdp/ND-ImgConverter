@@ -62,6 +62,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Force lcms2-sys to compile Little-CMS2 statically. Without this,
+          # macOS links against the build machine's Homebrew dylib path and
+          # the shipped app crashes on machines without Homebrew.
+          LCMS2_STATIC: '1'
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'ND Image Converter ${{ github.ref_name }}'
