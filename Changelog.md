@@ -2,6 +2,12 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.7.0] - Video to GIF MVP
+
+* Added local video probing and GIF export for MP4/MOV/MKV/WebM inputs.
+* Added In/Out trim points, width, FPS and quality controls.
+* Requires `ffmpeg` and `ffprobe` on PATH for development; packaged sidecars are the next release task.
+
 ---
 
 ## [v0.4.0] - Pro Suite & Automation Update 🚀

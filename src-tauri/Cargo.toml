@@ -1,6 +1,6 @@
 [package]
 name = "nd-image-converter"
-version = "0.5.0"
+version = "0.7.0"
 description = "Fast offline batch image converter"
 authors = ["duongtruongdp"]
 edition = "2021"
@@ -52,4 +52,3 @@ kamadak-exif = "0.5"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-
