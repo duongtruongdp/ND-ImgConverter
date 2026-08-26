@@ -1,10 +1,6 @@
 [package]
 name = "nd-image-converter"
-<<<<<<< HEAD
-version = "0.6.3"
-=======
-version = "0.7.0"
->>>>>>> origin/dev
+version = "0.8.0"
 description = "Fast offline batch image converter"
 authors = ["duongtruongdp"]
 edition = "2021"
@@ -17,7 +13,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-tauri-plugin-opener = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
@@ -45,9 +40,7 @@ resvg = "0.45"
 usvg = "0.45"
 rawloader = "0.37"
 heic = { version = "0.1", default-features = false, features = ["std"] }
-imageproc = "0.25"
-rusttype = "0.9"
-ab_glyph = "0.2"
+
 # 1. Folder Automation / File System Watcher
 notify = "6.1"
 notify-debouncer-mini = "0.4"

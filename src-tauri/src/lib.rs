@@ -46,6 +46,11 @@ async fn export_video_to_gif(options: video::GifOptions) -> Result<String, Strin
 }
 
 #[tauri::command]
+async fn convert_video(options: video::VideoConvertOptions) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || video::convert(options)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn calculate_quality_estimate(
     items: Vec<ImageMetadata>,
     format: OutputFormat,
@@ -269,7 +274,8 @@ pub fn run() {
             calculate_quality_estimate,
             scan_dropped_paths,
             probe_video,
-            export_video_to_gif
+            export_video_to_gif,
+            convert_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

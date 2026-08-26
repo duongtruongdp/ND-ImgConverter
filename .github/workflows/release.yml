@@ -1,15 +1,15 @@
-name: Release App
+name: "Release App"
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to build (for example v0.7.0)'
+        description: "Release tag to build"
         required: true
-        default: 'v0.7.0'
+        default: "v0.8.0"
 
 jobs:
   release:
@@ -34,14 +34,13 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -77,20 +76,43 @@ jobs:
           fi
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Build Tauri application
+      - name: Build Tauri App & Create Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Force lcms2-sys to compile Little-CMS2 statically. Without this,
-          # macOS links against the build machine's Homebrew dylib path and
-          # the shipped app crashes on machines without Homebrew.
           LCMS2_STATIC: '1'
         with:
           tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
-          releaseName: 'ND Image Converter ${{ github.event.inputs.release_tag || github.ref_name }}'
-          releaseBody: 'See changelog for detailed release notes.'
+          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || github.ref_name }}"
           releaseDraft: false
-          prerelease: false
+          releasePrerelease: false
           args: ${{ matrix.args }}
+          body: |
+            ### 🔒 Privacy & Security Notice
+            **ND Image Converter is 100% open-source, safe, and contains NO malware or telemetry.**
+            Because the app is not code-signed with expensive Apple Developer or Microsoft certificates, your operating system may show a security prompt upon first launch.
+
+            ---
+
+            ### 🍏 macOS Installation Guide
+            If macOS displays an error like *"App is damaged and can't be opened"* or blocks the app via Gatekeeper:
+            1. Drag **ND Image Converter** into your `/Applications` folder.
+            2. Open **Terminal** and run the following command to remove the quarantine flag:
+            ```bash
+            sudo xattr -cr /Applications/ND\ Image\ Converter.app
+            ```
+            3. Enter your Mac password when prompted, then open the app normally.
+            > *Alternative:* Right-click the app in Finder $\rightarrow$ Select **Open** $\rightarrow$ Click **Open** in the confirmation dialog.
+
+            ---
+
+            ### 🪟 Windows Installation Guide
+            If Windows SmartScreen displays *"Windows protected your PC"*:
+            1. Click **More info**.
+            2. Click **Run anyway**.
+            3. *(If required)* Right-click the installer/app and choose **Run as administrator**.
+
+            ---
+            *All conversions are processed 100% locally on your machine.*

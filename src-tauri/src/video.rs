@@ -4,6 +4,7 @@ use std::process::Command;
 
 #[derive(Debug, Serialize)]#[serde(rename_all="camelCase")] pub struct VideoInfo { pub path: String, pub duration: f64, pub width: u32, pub height: u32, pub codec: String }
 #[derive(Debug, Deserialize)]#[serde(rename_all="camelCase")] pub struct GifOptions { pub input_path: String, pub in_point: f64, pub out_point: f64, pub width: u32, pub fps: u32, pub quality: u8, pub output_directory: Option<String> }
+#[derive(Debug, Deserialize)]#[serde(rename_all="camelCase")] pub struct VideoConvertOptions { pub input_path: String, pub output_format: String, pub video_codec: String, pub quality: u8, pub audio: bool, pub output_directory: Option<String> }
 
 fn tool(name: &str) -> String {
   if let Ok(custom) = std::env::var(format!("ND_{}", name.to_uppercase())) { return custom; }
@@ -29,4 +30,18 @@ pub fn export(options: GifOptions) -> Result<String, String> {
   let vf=format!("fps={},scale={}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors={}[p];[s1][p]paletteuse=dither=sierra2_4a", options.fps, options.width, 32 + (options.quality as u32 * 224 / 100));
   let status=Command::new(tool("ffmpeg")).args(["-y","-ss",&options.in_point.to_string(),"-i",&options.input_path,"-t",&duration.to_string(),"-vf",&vf,"-loop","0",output.to_str().unwrap_or("output.gif")]).status().map_err(|e|format!("ffmpeg unavailable: {e}"))?;
   if !status.success(){return Err("FFmpeg failed to export GIF".into());} Ok(output.to_string_lossy().into())
+}
+
+pub fn convert(options: VideoConvertOptions) -> Result<String, String> {
+  let input = Path::new(&options.input_path); if !input.exists() { return Err("Input video not found".into()); }
+  let dir = options.output_directory.map(PathBuf::from).unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).to_path_buf()); std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  let stem = input.file_stem().and_then(|v| v.to_str()).unwrap_or("output"); let output = dir.join(format!("{stem}.{}", options.output_format));
+  let codec = match options.video_codec.as_str() { "h264" => "libx264", "h265" => "libx265", "vp8" => "libvpx", "vp9" => "libvpx-vp9", "av1" => "libaom-av1", _ => return Err("Unsupported video codec".into()) };
+  let crf = ((100 - options.quality.min(100)) * 3 / 2 + 18).to_string();
+  let mut args = vec!["-y".into(), "-i".into(), options.input_path, "-c:v".into(), codec.into(), "-crf".into(), crf, "-b:v".into(), "0".into()];
+  if options.output_format == "webm" { args.extend(["-deadline".into(), "good".into()]); }
+  if options.audio { args.extend(["-c:a".into(), if options.output_format == "webm" { "libopus".into() } else { "aac".into() }]); } else { args.push("-an".into()); }
+  args.push(output.to_string_lossy().into());
+  let status = Command::new(tool("ffmpeg")).args(args).status().map_err(|e| format!("ffmpeg unavailable: {e}"))?;
+  if !status.success() { return Err("FFmpeg failed to convert the video".into()); } Ok(output.to_string_lossy().into())
 }
