@@ -82,9 +82,9 @@ jobs:
           mkdir -p src-tauri/binaries/lib
           for binary in src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe; do
             while read -r dependency; do
-              case "$dependency" in
+              library="$(printf '%s\n' "$dependency" | awk '{print $1}')"
+              case "$library" in
                 /opt/homebrew/*|/usr/local/*)
-                  library="${dependency%% *}"
                   destination="src-tauri/binaries/lib/$(basename "$library")"
                   if [ ! -f "$destination" ]; then
                     cp "$library" "$destination"
@@ -100,9 +100,9 @@ jobs:
             for library in src-tauri/binaries/lib/*.dylib; do
               [ -f "$library" ] || continue
               while read -r dependency; do
-              case "$dependency" in
+              dependency_path="$(printf '%s\n' "$dependency" | awk '{print $1}')"
+              case "$dependency_path" in
                 /opt/homebrew/*|/usr/local/*)
-                  dependency_path="${dependency%% *}"
                   dependency_name="$(basename "$dependency_path")"
                   destination="src-tauri/binaries/lib/$dependency_name"
                   if [ ! -f "$destination" ]; then cp "$dependency_path" "$destination"; chmod +x "$destination"; install_name_tool -id "@loader_path/$dependency_name" "$destination" || true; fi
