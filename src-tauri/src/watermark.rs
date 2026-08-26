@@ -40,7 +40,7 @@ pub fn apply_watermark(
             let scale = PxScale::from(font_size);
             let scaled_font = font.as_scaled(scale);
 
-            let mut text_w = 0.0;
+            let mut text_w: f32 = 0.0;
             for c in text.chars() {
                 text_w += scaled_font.h_advance(scaled_font.glyph_id(c));
             }
