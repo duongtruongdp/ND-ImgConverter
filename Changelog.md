@@ -8,9 +8,28 @@ All notable changes and feature releases for **ND Image Converter** are document
 
 ---
 
-## [v0.4.0] - Pro Suite & Automation Update 🚀
+## [v0.6.1] - 2026-08-19
 
-> **Transform your imaging workflow with automated folder processing, studio-grade color science, and real-time quality intelligence.**
+### Fixed
+* Automated Update Checker: Corrected the GitHub repository URL slug (duongtruongdp/ND-ImgConverter) to resolve 404 Not Found API responses.
+* Dynamic Release Detection: Replaced hardcoded version strings with runtime getVersion() resolution and implemented a robust SemVer numeric comparison to catch both stable and pre-release updates.
+* External Redirection: Fixed cross-platform release page navigation using browser fallback mechanisms.
+
+## [v0.6.0] - 2026-08-17 🚀
+
+### ⚡ Added
+
+* High-Performance Watermark Engine:
+* Typography & Signature Mode: Sub-pixel text rendering powered by ab_glyph with dynamic font scaling and opacity controls.
+* Custom Logo Overlays: Alpha-blended graphic stamping supporting transparent PNG and WebP assets.
+* 9-Anchor Positioning Matrix: Precision placement grid (Top, Center, Bottom / Left, Center, Right) with proportional margin offsets.
+* Interactive Live Canvas Preview: Real-time visual feedback for typography size, opacity, and positioning before batch processing.
+* Zero-Overhead EXIF & Metadata Stripper: One-click toggle to remove GPS location tags, camera metadata, and embedded preview thumbnails for privacy protection and smaller file sizes.
+* Official Linux Packaging Pipeline: Added automated GitHub Actions build support for Linux distributions via .deb and standalone .AppImage packages.
+
+### Changed
+* Typography Alignment: Enhanced text metric calculations using actual glyph advances instead of character estimates for precise right-aligned and bottom-aligned placements.
+* Build Optimization: Configured Rust compiler dev profile optimizations (opt-level = 2) for faster 8K multi-threaded processing.
 
 ### ⚡ What's New
 

@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.6.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.6.2)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
   </a>
 </p>
 
@@ -27,9 +27,9 @@ No terminal or programming tools required. Simply download the pre-built install
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download .dmg](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.0/ND.Image.Converter_0.6.0_universal.dmg) |
-| **Windows** | `.exe` | x64 (64-bit) | [Download .exe](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.0/ND.Image.Converter_0.6.0_x64-setup.exe) |
-| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download .deb](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.0/ND.Image.Converter_0.6.0_amd64.deb) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download .dmg](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.1/ND.Image.Converter_0.6.1_universal.dmg) |
+| **Windows** | `.exe` | x64 (64-bit) | [Download .exe](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.1/ND.Image.Converter_0.6.1_x64-setup.exe) |
+| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download .deb](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.1/ND.Image.Converter_0.6.1_amd64.deb) |
 
 ### First-Time Launch Instructions
 
