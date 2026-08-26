@@ -2,6 +2,7 @@ mod watermark;
 mod engine;
 mod errors;
 mod models;
+mod video;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -30,6 +31,18 @@ pub struct BatchSizeEstimation {
     pub total_estimated_bytes: u64,
     pub savings_percentage: f64,
     pub quality_tier: String,
+}
+
+#[tauri::command]
+async fn probe_video(path: String) -> Result<video::VideoInfo, String> {
+    video::probe(&path)
+}
+
+#[tauri::command]
+async fn export_video_to_gif(options: video::GifOptions) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || video::export(options))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -254,7 +267,9 @@ pub fn run() {
             start_watch_automation,
             stop_watch_automation,
             calculate_quality_estimate,
-            scan_dropped_paths
+            scan_dropped_paths,
+            probe_video,
+            export_video_to_gif
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

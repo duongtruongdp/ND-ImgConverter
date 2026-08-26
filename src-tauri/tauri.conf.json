@@ -1,7 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ND Image Converter",
+<<<<<<< HEAD
   "version": "0.6.3",
+=======
+  "version": "0.7.0",
+>>>>>>> origin/dev
   "identifier": "com.nd.imageconverter",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -24,12 +28,17 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/**", "$TEMP/**"]
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": ["binaries/ffmpeg", "binaries/ffprobe"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

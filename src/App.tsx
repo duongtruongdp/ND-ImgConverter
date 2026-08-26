@@ -30,7 +30,11 @@ import { ComparisonModal } from './components/comparison/ComparisonModal';
 import { AutomationTab } from './components/automation/AutomationTab';
 import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
 import { UpdateChecker } from './components/updater/UpdateChecker';
+<<<<<<< HEAD
 import { WatermarkAndMetaPanel } from './components/WatermarkAndMetaPanel/WatermarkAndMetaPanel';
+=======
+import { VideoToGifTab } from './components/video/VideoToGifTab';
+>>>>>>> origin/dev
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
@@ -55,7 +59,7 @@ export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
   const settings = useSettingsStore();
   
-  const [currentTab, setCurrentTab] = useState<'converter' | 'automation'>('converter');
+  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video'>('converter');
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
@@ -295,7 +299,11 @@ export default function App() {
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
+<<<<<<< HEAD
           <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.6.3</span>
+=======
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.7.0</span>
+>>>>>>> origin/dev
         </div>
 
         {/* Center: Absolute Fixed Position Tabs */}
@@ -320,6 +328,12 @@ export default function App() {
               }`}
             >
               <Activity className="w-3.5 h-3.5" /> Watch Folder
+            </button>
+            <button
+              onClick={() => setCurrentTab('video')}
+              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}
+            >
+              <Activity className="w-3.5 h-3.5" /> Video to GIF
             </button>
           </div>
         </div>
@@ -368,7 +382,7 @@ export default function App() {
       </header>
 
       {/* Main Body */}
-      {currentTab === 'converter' ? (
+      {currentTab === 'video' ? <VideoToGifTab /> : currentTab === 'converter' ? (
         <>
           <main className="flex-1 relative overflow-hidden flex flex-col p-4">
             {files.length === 0 ? (

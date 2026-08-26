@@ -2,6 +2,7 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+<<<<<<< HEAD
 ## [v0.6.3] - Updater Browser Launch Fix
 
 * Open release links through Tauri's native opener plugin so the system browser launches reliably on macOS and Windows.
@@ -9,6 +10,13 @@ All notable changes and feature releases for **ND Image Converter** are document
 ## [v0.6.2] - macOS Packaging Fix
 
 * Force Little-CMS2 to link statically in release builds so packaged macOS apps do not depend on the builder's Homebrew installation.
+=======
+## [v0.7.0] - Video to GIF MVP
+
+* Added local video probing and GIF export for MP4/MOV/MKV/WebM inputs.
+* Added In/Out trim points, width, FPS and quality controls.
+* Requires `ffmpeg` and `ffprobe` on PATH for development; packaged sidecars are the next release task.
+>>>>>>> origin/dev
 
 ---
 
