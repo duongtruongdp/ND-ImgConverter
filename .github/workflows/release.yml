@@ -2,6 +2,8 @@ name: "Release App"
 
 on:
   push:
+    branches:
+      - dev
     tags:
       - "v*"
   workflow_dispatch:
@@ -9,7 +11,7 @@ on:
       release_tag:
         description: "Release tag to build"
         required: true
-        default: "v0.8.0"
+        default: "v0.8.1"
 
 jobs:
   release:
@@ -121,8 +123,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LCMS2_STATIC: '1'
         with:
-          tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
-          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || github.ref_name }}"
+          tagName: ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.8.1-dev.{0}', github.run_number) || github.ref_name) }}
+          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.8.1-dev.{0}', github.run_number) || github.ref_name) }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
