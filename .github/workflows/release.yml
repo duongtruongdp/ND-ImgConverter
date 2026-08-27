@@ -2,6 +2,8 @@ name: "Release App"
 
 on:
   push:
+    branches:
+      - dev
     tags:
       - "v*"
   workflow_dispatch:
@@ -9,7 +11,7 @@ on:
       release_tag:
         description: "Release tag to build"
         required: true
-        default: "v0.8.0"
+        default: "v0.8.1"
 
 jobs:
   release:
@@ -22,9 +24,6 @@ jobs:
           - platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
             target: "aarch64-apple-darwin"
-          - platform: "macos-13"
-            args: "--target x86_64-apple-darwin"
-            target: "x86_64-apple-darwin"
           - platform: "windows-latest"
             args: ""
             target: "x86_64-pc-windows-msvc"
@@ -112,6 +111,12 @@ jobs:
               done < <(otool -L "$library" | tail -n +2)
             done
           done
+          for library in src-tauri/binaries/lib/*.dylib; do
+            [ -f "$library" ] || continue
+            codesign --force --sign - --timestamp=none "$library"
+          done
+          codesign --force --sign - --timestamp=none src-tauri/binaries/ffmpeg
+          codesign --force --sign - --timestamp=none src-tauri/binaries/ffprobe
       - name: Install frontend dependencies
         run: npm install
 
@@ -121,8 +126,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LCMS2_STATIC: '1'
         with:
-          tagName: ${{ github.event.inputs.release_tag || github.ref_name }}
-          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || github.ref_name }}"
+          tagName: ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.8.1-dev.{0}', github.run_number) || github.ref_name) }}
+          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.8.1-dev.{0}', github.run_number) || github.ref_name) }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
