@@ -111,6 +111,12 @@ jobs:
               done < <(otool -L "$library" | tail -n +2)
             done
           done
+          for library in src-tauri/binaries/lib/*.dylib; do
+            [ -f "$library" ] || continue
+            codesign --force --sign - --timestamp=none "$library"
+          done
+          codesign --force --sign - --timestamp=none src-tauri/binaries/ffmpeg
+          codesign --force --sign - --timestamp=none src-tauri/binaries/ffprobe
       - name: Install frontend dependencies
         run: npm install
 
