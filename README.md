@@ -175,7 +175,11 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 
 [x] v0.5: Integrate GitHub auto-update checker, optimize HEIC fast-path decoding, and polish installer branding.
 
-[x] v0.6: Watermark Engine, EXIF Stripper, and Linux Build Pipeline
+[x] v0.6: Watermark Engine, EXIF Stripper, and Linux Build Pipeline.
+
+[x] v0.7: Added Video to GIF conversion with MP4/MOV/MKV/WebM input support.
+
+[x] v0.8: Added Video Conversion with MP4/MOV/WEBM input/output support.
 
 [ ] v1.0: Stable milestone release with full cross-platform parity.
 
