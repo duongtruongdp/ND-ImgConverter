@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='light'] body {
+  background: #f4f6f8;
+}
+
+:root[data-theme='light'] .app-shell {
+  background: #f4f6f8;
+  color: #1f2937;
+}
+
+:root[data-theme='light'] [class*="bg-[#101216"],
+:root[data-theme='light'] [class*="bg-[#111317"],
+:root[data-theme='light'] [class*="bg-[#12141a"],
+:root[data-theme='light'] [class*="bg-[#15181e"],
+:root[data-theme='light'] [class*="bg-[#161920"],
+:root[data-theme='light'] [class*="bg-[#171a21"] {
+  background-color: #ffffff;
+}
+
+:root[data-theme='light'] [class*="text-zinc-100"],
+:root[data-theme='light'] [class*="text-zinc-200"],
+:root[data-theme='light'] [class*="text-zinc-300"] {
+  color: #1f2937;
+}
+
+:root[data-theme='light'] [class*="text-zinc-400"],
+:root[data-theme='light'] [class*="text-zinc-500"] {
+  color: #64748b;
+}
+
+:root[data-theme='light'] [class*="border-zinc-800"],
+:root[data-theme='light'] [class*="border-zinc-700"] {
+  border-color: #dbe2ea;
+}

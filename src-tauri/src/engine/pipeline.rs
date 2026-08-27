@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Cursor};
 use std::path::{Path, PathBuf};
 use image::{
     codecs::jpeg::JpegEncoder, 
@@ -52,6 +52,45 @@ pub fn estimate_single_file_size(
         OutputFormat::Tiff => (pixels * 3.0) as u64 + 1024,
         _ => (pixels * 0.35) as u64,
     }
+}
+
+fn write_single_image_pdf(image: &DynamicImage, output_path: &Path, quality: u8) -> Result<(), EngineError> {
+    let rgb = image.to_rgb8();
+    let (width, height) = rgb.dimensions();
+    let mut jpeg = Vec::new();
+    let encoder = JpegEncoder::new_with_quality(Cursor::new(&mut jpeg), quality.clamp(1, 100));
+    DynamicImage::ImageRgb8(rgb)
+        .write_with_encoder(encoder)
+        .map_err(|error| EngineError::EncodeFailed(format!("PDF image encoding failed: {error}")))?;
+
+    let page_width = width as f32;
+    let page_height = height as f32;
+    let content = format!("q\n{} 0 0 {} 0 0 cm\n/Im0 Do\nQ\n", page_width, page_height);
+    let objects = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>", page_width, page_height).into_bytes(),
+        format!("<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {} >>\nstream\n", width, height, jpeg.len()).into_bytes(),
+        format!("<< /Length {} >>\nstream\n{}endstream", content.len(), content).into_bytes(),
+    ];
+
+    let mut pdf = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
+    let mut offsets = Vec::with_capacity(objects.len());
+    for (index, object) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n", index + 1).as_bytes());
+        pdf.extend_from_slice(object);
+        if index == 3 {
+            pdf.extend_from_slice(&jpeg);
+            pdf.extend_from_slice(b"\nendstream");
+        }
+        pdf.extend_from_slice(b"\nendobj\n");
+    }
+    let xref_offset = pdf.len();
+    pdf.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for offset in offsets { pdf.extend_from_slice(format!("{:010} 00000 n \n", offset).as_bytes()); }
+    pdf.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n", objects.len() + 1, xref_offset).as_bytes());
+    std::fs::write(output_path, pdf).map_err(|error| EngineError::EncodeFailed(format!("PDF write failed: {error}")))
 }
 
 // Find and extract the largest embedded JPEG preview from a RAW/DNG file
@@ -347,6 +386,9 @@ pub fn process_single_image(
             processed_img
                 .write_with_encoder(encoder)
                 .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        OutputFormat::Pdf => {
+            write_single_image_pdf(&processed_img, &output_path, options.quality)?;
         }
         _ => {
             processed_img

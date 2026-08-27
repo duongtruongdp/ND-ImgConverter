@@ -2,7 +2,7 @@
 
 **Blazing-fast, privacy-first, offline batch image converter & optimizer for desktop.**
 
-![Version](https://img.shields.io/badge/version-0.6.3-blue.svg)
+![Version](https://img.shields.io/badge/version-0.8.2-blue.svg)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)

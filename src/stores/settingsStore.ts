@@ -51,6 +51,7 @@ export interface ConversionSettings {
   activePresetId: string | null;
   stripMetadata: boolean;
   watermark: WatermarkConfig;
+  theme: 'dark' | 'light';
 }
 
 export interface SettingsState extends ConversionSettings {
@@ -65,6 +66,7 @@ export interface SettingsState extends ConversionSettings {
   applyPreset: (preset: Preset) => void;
   setStripMetadata: (strip: boolean) => void;
   setWatermark: (watermark: WatermarkConfig) => void;
+  setTheme: (theme: 'dark' | 'light') => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -90,6 +92,7 @@ export const useSettingsStore = create<SettingsState>()(
         opacity: 0.8,
         scalePercent: 15,
       },
+      theme: 'dark',
 
       setFormat: (format) => set({ format, activePresetId: null }),
       setQuality: (quality) => set({ quality, activePresetId: null }),
@@ -111,6 +114,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setStripMetadata: (stripMetadata: boolean) => set({ stripMetadata }),
       setWatermark: (watermark: WatermarkConfig) => set({ watermark }),
+      setTheme: (theme) => set({ theme }),
     }),
     {
       name: 'nd-image-converter-settings',

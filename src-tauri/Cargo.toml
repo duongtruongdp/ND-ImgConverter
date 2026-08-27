@@ -1,6 +1,6 @@
 [package]
 name = "nd-image-converter"
-version = "0.8.1"
+version = "0.8.2"
 description = "Fast offline batch image converter"
 authors = ["duongtruongdp"]
 edition = "2021"
@@ -23,6 +23,7 @@ webp = "0.3"
 base64 = "0.22"
 ab_glyph = "0.2"
 imageproc = "0.26"
+printpdf = "0.7"
 
 image = { version = "0.25", features = [
     "jpeg", 

@@ -2,6 +2,16 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.8.2] - 2026-08-28
+
+### Added
+- Added explicit VFR to CFR video conversion with selectable target FPS.
+- Added persistent Dark and Light themes.
+
+### Fixed
+- Added a native single-page PDF encoder for PNG and SVG exports.
+- Improved PDF conversion error propagation and removed unsupported PDF save fallbacks.
+
 ## [v0.8.0] - Native Output Folder Picker
 
 * Replaced manual output path text fields with native folder pickers in Video to GIF and Video Converter.

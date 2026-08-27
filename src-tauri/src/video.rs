@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[derive(Debug, Serialize)]#[serde(rename_all="camelCase")] pub struct VideoInfo { pub path: String, pub duration: f64, pub width: u32, pub height: u32, pub codec: String }
 #[derive(Debug, Deserialize)]#[serde(rename_all="camelCase")] pub struct GifOptions { pub input_path: String, pub in_point: f64, pub out_point: f64, pub width: u32, pub fps: u32, pub quality: u8, pub output_directory: Option<String> }
-#[derive(Debug, Deserialize)]#[serde(rename_all="camelCase")] pub struct VideoConvertOptions { pub input_path: String, pub output_format: String, pub video_codec: String, pub quality: u8, pub audio: bool, pub output_directory: Option<String> }
+#[derive(Debug, Deserialize)]#[serde(rename_all="camelCase")] pub struct VideoConvertOptions { pub input_path: String, pub output_format: String, pub video_codec: String, pub quality: u8, pub audio: bool, pub output_directory: Option<String>, pub force_cfr: bool, pub target_fps: Option<f64> }
 
 fn tool(name: &str) -> String {
   if let Ok(custom) = std::env::var(format!("ND_{}", name.to_uppercase())) { return custom; }
@@ -51,6 +51,10 @@ pub fn convert(options: VideoConvertOptions) -> Result<String, String> {
   let crf = ((100 - options.quality.min(100)) * 3 / 2 + 18).to_string();
   let mut args = vec!["-y".into(), "-i".into(), options.input_path, "-c:v".into(), codec.into(), "-crf".into(), crf, "-b:v".into(), "0".into()];
   if options.output_format == "webm" { args.extend(["-deadline".into(), "good".into()]); }
+  if options.force_cfr {
+    let fps = options.target_fps.filter(|value| value.is_finite() && *value > 0.0).ok_or("A valid target FPS is required for CFR conversion")?;
+    args.extend(["-r".into(), fps.to_string(), "-fps_mode".into(), "cfr".into()]);
+  }
   if options.audio { args.extend(["-c:a".into(), if options.output_format == "webm" { "libopus".into() } else { "aac".into() }]); } else { args.push("-an".into()); }
   args.push(output.to_string_lossy().into());
   let status = Command::new(tool("ffmpeg")).args(args).status().map_err(|e| format!("ffmpeg unavailable: {e}"))?;

@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Layers,
   Activity
+  ,Sun, Moon
 } from 'lucide-react';
 import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
@@ -64,6 +65,10 @@ export default function App() {
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
   
   const formatMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme;
+  }, [settings.theme]);
 
   // 1. Scan the path and ingest files
   const processIncomingFiles = useCallback(async (rawPaths: string[]) => {
@@ -276,7 +281,7 @@ export default function App() {
   }, [files, updateFileStatus]);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
+    <div className="app-shell flex flex-col h-screen w-screen bg-[#0b0d10] text-zinc-200 select-none font-sans antialiased overflow-hidden">
       {/* Header with Native Window Dragging */}
       <header
         data-tauri-drag-region
@@ -289,7 +294,7 @@ export default function App() {
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.8.1</span>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.8.2</span>
         </div>
 
         {/* Center: Absolute Fixed Position Tabs */}
@@ -327,6 +332,13 @@ export default function App() {
 
         {/* Right: Presets & Quick Actions */}
         <div className="flex items-center gap-2 z-10">
+          <button
+            onClick={() => settings.setTheme(settings.theme === 'dark' ? 'light' : 'dark')}
+            className="h-7 w-7 rounded-lg bg-[#171a21] border border-zinc-800 text-zinc-400 hover:text-zinc-100 flex items-center justify-center transition cursor-pointer"
+            title={`Switch to ${settings.theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {settings.theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
           {currentTab === 'converter' && (
             <>
               <div className="hidden xl:flex items-center gap-1 bg-[#15181e] p-1 rounded-xl border border-zinc-800/80">
