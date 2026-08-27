@@ -9,6 +9,7 @@ export const UpdateChecker = () => {
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [releaseUrl, setReleaseUrl] = useState<string>('');
   const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkUpdate = async () => {
@@ -18,7 +19,7 @@ export const UpdateChecker = () => {
 
         // 2. GitHub API to get the latest release.
         const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`,
+          `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
           {
             headers: {
               Accept: 'application/vnd.github.v3+json',
@@ -31,22 +32,39 @@ export const UpdateChecker = () => {
         const releases = await response.json();
         if (!Array.isArray(releases) || releases.length === 0) return;
 
-        const latestRelease = releases[0];
-        const tag = (latestRelease.tag_name || '').replace(/^v/, '');
-        const cleanCurrent = currentVersion.replace(/^v/, '');
+        const stableReleases = releases.filter(
+          (release: any) =>
+            !release.draft &&
+            !release.prerelease &&
+            /^v?\d+\.\d+\.\d+$/.test(release.tag_name || '')
+        );
+        const latestRelease = stableReleases.sort((a: any, b: any) => {
+          const parse = (value: string) =>
+            value.replace(/^v/, '').split('.').map((part) => Number(part));
+          const left = parse(a.tag_name);
+          const right = parse(b.tag_name);
+          for (let index = 0; index < 3; index += 1) {
+            if (left[index] !== right[index]) return right[index] - left[index];
+          }
+          return 0;
+        })[0];
 
-        // 3. Compare using the SemVer standard (only show notification when the new tag is greater than the current version)
-        const isNewer =
-          tag.localeCompare(cleanCurrent, undefined, {
-            numeric: true,
-            sensitivity: 'base',
-          }) > 0;
+        if (!latestRelease) return;
+
+        const tag = (latestRelease.tag_name || '').replace(/^v/, '');
+        const cleanCurrent = currentVersion.replace(/^v/, '').split('-')[0];
+        const currentParts: number[] = cleanCurrent.split('.').map(Number);
+        const latestParts: number[] = tag.split('.').map(Number);
+        const isNewer = latestParts.some(
+          (part: number, index: number) =>
+            part > (currentParts[index] || 0) &&
+            latestParts.slice(0, index).every((value: number, i: number) => value === (currentParts[i] || 0))
+        );
 
         if (isNewer) {
           setLatestVersion(tag);
           setReleaseUrl(
-            latestRelease.html_url ||
-              `https://github.com/${GITHUB_REPO}/releases`
+            `https://github.com/${GITHUB_REPO}/releases/tag/${latestRelease.tag_name}`
           );
           setIsOpen(true);
         }
@@ -68,6 +86,7 @@ export const UpdateChecker = () => {
       setIsOpen(false);
     } catch (err) {
       console.error('Failed to open release page:', err);
+      setError('Unable to open the download page. Copy this link into your browser.');
     }
   };
 
@@ -107,6 +126,11 @@ export const UpdateChecker = () => {
           <Download className="w-3 h-3" /> Download Update
         </button>
       </div>
+      {error && (
+        <p className="mt-2 text-[10px] leading-relaxed text-red-400 break-all">
+          {error} {releaseUrl}
+        </p>
+      )}
     </div>
   );
 };
