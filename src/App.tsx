@@ -23,7 +23,7 @@ import {
   ChevronDown,
   Layers,
   Activity
-  ,Sun, Moon
+  ,Sun, Moon, Camera
 } from 'lucide-react';
 import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
@@ -33,6 +33,7 @@ import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
 import { UpdateChecker } from './components/updater/UpdateChecker';
 import { VideoToGifTab } from './components/video/VideoToGifTab';
 import { VideoConverterTab } from './components/video/VideoConverterTab';
+import { GrabStillsTab } from './components/video/GrabStillsTab';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 interface ProgressPayload {
@@ -57,7 +58,7 @@ export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
   const settings = useSettingsStore();
   
-  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter'>('converter');
+  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter' | 'grab-stills'>('converter');
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
@@ -327,6 +328,7 @@ export default function App() {
               <Activity className="w-3.5 h-3.5" /> Video to GIF
             </button>
             <button onClick={() => setCurrentTab('video-converter')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-converter' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><ArrowRight className="w-3.5 h-3.5" /> Video Convert</button>
+            <button onClick={() => setCurrentTab('grab-stills')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'grab-stills' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><Camera className="w-3.5 h-3.5" /> Grab Stills</button>
           </div>
         </div>
 
@@ -381,7 +383,7 @@ export default function App() {
       </header>
 
       {/* Main Body */}
-      {currentTab === 'video-converter' ? <VideoConverterTab /> : currentTab === 'video' ? <VideoToGifTab /> : currentTab === 'converter' ? (
+      {currentTab === 'converter' ? (
         <>
           <main className="flex-1 relative overflow-hidden flex flex-col p-4">
             {files.length === 0 ? (
@@ -400,7 +402,7 @@ export default function App() {
                 <p className="text-xs text-zinc-500 mb-4">or click to browse from computer (⌘O)</p>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-400 bg-[#161920] px-3 py-1.5 rounded-full border border-zinc-800">
-                    50+ INPUT FORMATS • 19+ OUTPUT FORMATS
+                    50+ INPUT FORMATS • 12 OUTPUT FORMATS
                   </span>
                 </div>
               </div>
@@ -525,10 +527,10 @@ export default function App() {
                 </button>
 
                 {isFormatMenuOpen && (
-                  <div className="absolute bottom-11 left-0 w-[420px] bg-[#12151b] border border-zinc-800 rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="theme-surface-elevated absolute bottom-11 left-0 w-[420px] border rounded-2xl p-3.5 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
                     <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-zinc-800/80 px-1">
                       <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Select Output Format</span>
-                      <span className="text-[10px] text-zinc-400 font-mono">19 Formats</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">{ALL_OUTPUT_FORMATS.length} Formats</span>
                     </div>
                     <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto pr-1">
                       {ALL_OUTPUT_FORMATS.map((item) => (
@@ -541,7 +543,7 @@ export default function App() {
                           className={`h-8 rounded-xl text-[11px] font-medium transition-all flex items-center justify-center cursor-pointer border ${
                             settings.format === item.value
                               ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/30'
-                              : 'bg-[#181b22] border-zinc-800/80 text-zinc-300 hover:bg-[#202530] hover:border-zinc-700 hover:text-white'
+                              : 'theme-option theme-surface-control border'
                           }`}
                         >
                           {item.label}
@@ -632,10 +634,11 @@ export default function App() {
             </div>
           </footer>
         </>
-      ) : (
-        /* Automation Tab */
-        <AutomationTab />
-      )}
+      ) : null}
+      <div className={currentTab === 'automation' ? 'contents' : 'hidden'}><AutomationTab /></div>
+      <div className={currentTab === 'video' ? 'contents' : 'hidden'}><VideoToGifTab active={currentTab === 'video'} /></div>
+      <div className={currentTab === 'video-converter' ? 'contents' : 'hidden'}><VideoConverterTab active={currentTab === 'video-converter'} /></div>
+      <div className={currentTab === 'grab-stills' ? 'contents' : 'hidden'}><GrabStillsTab active={currentTab === 'grab-stills'} /></div>
 
       {/* Auto-Update Notification Banner */}
       <UpdateChecker />

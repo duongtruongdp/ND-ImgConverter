@@ -15,8 +15,13 @@ import {
   Sliders
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { VIDEO_CODECS, VIDEO_FPS_OPTIONS, VIDEO_OUTPUT_FORMATS } from '../../types/video';
+import { ALL_OUTPUT_FORMATS } from '../../types/conversion';
+
+type MenuKind = 'image-format' | 'video-format' | 'video-codec' | 'video-fps';
 
 interface LogItem {
+  mediaType?: string;
   id: string;
   sourceFile: string;
   outputFile?: string;
@@ -40,12 +45,14 @@ export const AutomationTab = () => {
   const [processedPath, setProcessedPath] = useState<string>('');
   const [isWatching, setIsWatching] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogItem[]>([]);
+  const [openMenu, setOpenMenu] = useState<MenuKind | null>(null);
 
   useEffect(() => {
     const unlistenPromise = listen<any>('folder-automation-event', (event) => {
       const payload = event.payload;
       const newLog: LogItem = {
         id: crypto.randomUUID(),
+        mediaType: payload.mediaType,
         sourceFile: payload.sourceFile,
         outputFile: payload.outputFile,
         outputSize: payload.outputSize,
@@ -102,6 +109,17 @@ export const AutomationTab = () => {
             outputDirectory: processedPath,
             colorSpace: 'srgb',
           },
+          videoOptions: {
+            inputPath: '',
+            outputFormat: settings.videoOutputFormat,
+            videoCodec: settings.videoCodec,
+            quality: settings.videoQuality,
+            audio: settings.videoAudio,
+            outputDirectory: processedPath,
+            forceCfr: settings.videoForceCfr,
+            targetFps: settings.videoForceCfr ? Number(settings.videoTargetFps) : null,
+            outputFilename: null,
+          },
         });
         setIsWatching(true);
       } catch (e) {
@@ -109,6 +127,8 @@ export const AutomationTab = () => {
       }
     }
   };
+
+  const profileMenu = (kind: MenuKind, value: string, options: Array<{ value: string; label: string }>, setValue: (value: string) => void, disabled = false) => <div className="relative min-w-0"><button type="button" disabled={disabled || isWatching} onClick={() => setOpenMenu(openMenu === kind ? null : kind)} className={`theme-surface-control h-8 min-w-24 rounded-lg border px-2 text-left text-[11px] flex items-center justify-between gap-2 ${disabled || isWatching ? 'opacity-50 cursor-not-allowed' : ''}`}><span className="truncate">{options.find((option) => option.value === value)?.label}</span><span className="text-zinc-500">⌄</span></button>{openMenu === kind && !disabled && !isWatching && <div className="theme-surface-elevated absolute z-30 mt-1 min-w-full rounded-lg border p-1 shadow-xl">{options.map((option) => <button type="button" key={option.value} onClick={() => { setValue(option.value); setOpenMenu(null); }} className={`theme-option w-full rounded-md px-2 py-1.5 text-left text-[11px] ${option.value === value ? 'bg-blue-600 text-white' : ''}`}>{option.label}</button>)}</div>}</div>;
 
   const handleReveal = async (path: string) => {
     try {
@@ -140,7 +160,7 @@ export const AutomationTab = () => {
                 ? 'bg-red-600/80 hover:bg-red-600 text-white shadow-red-600/20'
                 : incomingPath && processedPath
                 ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25 active:scale-95'
-                : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                : 'theme-disabled-control cursor-not-allowed'
             }`}
           >
             {isWatching ? (
@@ -160,7 +180,7 @@ export const AutomationTab = () => {
           {/* Incoming Folder */}
           <div
             onClick={!isWatching ? handleSelectIncoming : undefined}
-            className={`p-3.5 rounded-2xl bg-[#171a22] border transition flex items-center justify-between ${
+            className={`theme-surface-control p-3.5 rounded-2xl border transition flex items-center justify-between ${
               isWatching ? 'opacity-70 cursor-not-allowed border-zinc-800' : 'border-zinc-800 hover:border-zinc-700 cursor-pointer'
             }`}
           >
@@ -182,7 +202,7 @@ export const AutomationTab = () => {
           {/* Processed Folder */}
           <div
             onClick={!isWatching ? handleSelectProcessed : undefined}
-            className={`p-3.5 rounded-2xl bg-[#171a22] border transition flex items-center justify-between ${
+            className={`theme-surface-control p-3.5 rounded-2xl border transition flex items-center justify-between ${
               isWatching ? 'opacity-70 cursor-not-allowed border-zinc-800' : 'border-zinc-800 hover:border-zinc-700 cursor-pointer'
             }`}
           >
@@ -202,14 +222,29 @@ export const AutomationTab = () => {
           </div>
         </div>
 
-        {/* Workflow Profile Selected */}
-        <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
-          <div className="flex items-center gap-2">
-            <Sliders className="w-3.5 h-3.5 text-zinc-500" />
-            <span className="text-xs text-zinc-400">Target Profile:</span>
-            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-              {settings.format} • {settings.quality}% Quality
-            </span>
+        <div className="pt-3 border-t theme-divider space-y-3">
+          <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider"><span className="w-3.5 shrink-0"><Sliders className="w-3.5 h-3.5 text-zinc-500" /></span><span>Image Profile</span></div>
+            <div className="flex flex-wrap items-center gap-2">
+              {profileMenu('image-format', settings.format, ALL_OUTPUT_FORMATS.map((format) => ({ value: format.value, label: format.label })), (value) => settings.setFormat(value as typeof settings.format), false)}
+              <label className="text-[11px] text-zinc-400 flex items-center gap-1">Quality <input type="number" min="1" max="100" disabled={isWatching} value={settings.quality} onChange={(event) => settings.setQuality(Number(event.target.value))} className="app-input w-16 h-8 rounded-lg px-2" /></label>
+            </div>
+          </div>
+          <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider"><span className="w-3.5 shrink-0" aria-hidden="true" /><span>Video Profile</span></div>
+            <div className="flex flex-wrap items-center gap-2">
+              {profileMenu('video-format', settings.videoOutputFormat, VIDEO_OUTPUT_FORMATS.map((value) => ({ value, label: value.toUpperCase() })), (value) => settings.setVideoProfile({ videoOutputFormat: value as typeof settings.videoOutputFormat }))}
+              {profileMenu('video-codec', settings.videoCodec, VIDEO_CODECS.map((codec) => ({ value: codec.value, label: codec.label })), (value) => settings.setVideoProfile({ videoCodec: value as typeof settings.videoCodec }))}
+              <label className="text-[11px] text-zinc-400 flex items-center gap-1">Quality <input type="number" min="1" max="100" disabled={isWatching} value={settings.videoQuality} onChange={(event) => settings.setVideoProfile({ videoQuality: Number(event.target.value) })} className="app-input w-16 h-8 rounded-lg px-2" /></label>
+            </div>
+          </div>
+          <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3">
+            <span />
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400">
+            <label className="flex items-center gap-1.5"><input type="checkbox" disabled={isWatching} checked={settings.videoAudio} onChange={(event) => settings.setVideoProfile({ videoAudio: event.target.checked })} /> Preserve audio</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" disabled={isWatching} checked={settings.videoForceCfr} onChange={(event) => settings.setVideoProfile({ videoForceCfr: event.target.checked })} /> VFR → CFR</label>
+            {profileMenu('video-fps', settings.videoTargetFps, VIDEO_FPS_OPTIONS.map((value) => ({ value, label: `${value} FPS` })), (value) => settings.setVideoProfile({ videoTargetFps: value }), !settings.videoForceCfr)}
+            </div>
           </div>
 
           {/* Status Indicator */}
@@ -227,8 +262,8 @@ export const AutomationTab = () => {
       </div>
 
       {/* Realtime Activity Stream */}
-      <div className="flex-1 bg-[#12141a] border border-zinc-800/80 rounded-3xl p-5 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-zinc-800/80">
+      <div className="theme-surface-elevated flex-1 border rounded-3xl p-5 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b theme-divider">
           <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
             Activity Stream
           </span>
@@ -239,13 +274,13 @@ export const AutomationTab = () => {
           {logs.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2">
               <Sparkles className="w-6 h-6 stroke-[1.5]" />
-              <span className="text-xs">No activity yet. Drop or copy new images into the watched folder.</span>
+              <span className="text-xs">No activity yet. Drop or copy new images or videos into the watched folder.</span>
             </div>
           ) : (
             logs.map((log) => (
               <div
                 key={log.id}
-                className="p-3 rounded-2xl bg-[#171a22] border border-zinc-800/80 flex items-center justify-between text-xs"
+                className="theme-surface-control p-3 rounded-2xl border flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   {log.success ? (
@@ -255,7 +290,7 @@ export const AutomationTab = () => {
                   )}
                   <div className="flex flex-col truncate">
                     <span className="font-medium text-zinc-200 truncate">
-                      {log.sourceFile.split('/').pop()}
+                      {log.mediaType === 'video' ? 'Video · ' : 'Image · '}{log.sourceFile.split('/').pop()}
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono">
                       {log.timestamp} • {log.outputSize ? formatBytes(log.outputSize) : log.error}

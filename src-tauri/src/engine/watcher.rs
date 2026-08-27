@@ -8,10 +8,12 @@ use tauri::{AppHandle, Emitter};
 
 use crate::engine::pipeline::process_single_image;
 use crate::models::conversion::ConversionOptions;
+use crate::video::{convert, VideoConvertOptions};
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct WatcherEventPayload {
+    pub media_type: String,
     pub source_file: String,
     pub output_file: Option<String>,
     pub output_size: Option<u64>,
@@ -41,6 +43,7 @@ pub fn start_folder_watcher(
     watch_path: String,
     output_path: String,
     options: ConversionOptions,
+    video_options: VideoConvertOptions,
 ) -> Result<(), String> {
     let watch_dir = PathBuf::from(&watch_path);
     if !watch_dir.exists() || !watch_dir.is_dir() {
@@ -58,6 +61,8 @@ pub fn start_folder_watcher(
     let app_clone = app.clone();
     let mut target_options = options.clone();
     target_options.output_directory = Some(output_path.clone());
+    let mut target_video_options = video_options.clone();
+    target_video_options.output_directory = Some(output_path.clone());
 
     // Thiết lập debouncer 1.5 giây để chờ file copy xong hoàn toàn
     let mut debouncer = new_debouncer(
@@ -74,36 +79,50 @@ pub fn start_folder_watcher(
                         continue;
                     }
 
-                    // Kiểm tra định dạng hợp lệ
                     let ext = path
                         .extension()
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_lowercase();
 
-                    let valid_extensions = [
+                    let image_extensions = [
                         "jpg", "jpeg", "png", "webp", "svg", "bmp", "ico", "gif", "tiff", "tif",
                         "tga", "pnm", "qoi", "avif", "arw", "cr2", "crw", "dng", "nef", "orf",
                         "pef", "raf", "rw2", "sr2", "srf", "psd", "exr", "heic", "heif",
                     ];
 
-                    if !valid_extensions.contains(&ext.as_str()) {
+                    let video_extensions = ["mp4", "mov", "mkv", "webm", "avi", "m4v"];
+                    let media_type = if image_extensions.contains(&ext.as_str()) {
+                        "image"
+                    } else if video_extensions.contains(&ext.as_str()) {
+                        "video"
+                    } else {
                         continue;
-                    }
+                    };
+                    let output_root = PathBuf::from(&output_path);
+                    if path.starts_with(&output_root) { continue; }
 
                     let path_str = path.to_string_lossy().to_string();
-                    let result = process_single_image(&path_str, &target_options);
+                    let result = if media_type == "image" {
+                        process_single_image(&path_str, &target_options).map(|res| (res.output_path, res.output_size))
+                    } else {
+                        convert(VideoConvertOptions { input_path: path_str.clone(), ..target_video_options.clone() })
+                            .map(|output| { let size = std::fs::metadata(&output).map(|meta| meta.len()).unwrap_or(0); (output, size) })
+                            .map_err(|error| crate::errors::EngineError::EncodeFailed(error))
+                    };
 
                     let payload = match result {
                         Ok(res) => WatcherEventPayload {
+                            media_type: media_type.to_string(),
                             source_file: path_str,
-                            output_file: Some(res.output_path),
-                            output_size: Some(res.output_size),
+                            output_file: Some(res.0),
+                            output_size: Some(res.1),
                             success: true,
                             error: None,
                             timestamp: chrono_now(),
                         },
                         Err(err) => WatcherEventPayload {
+                            media_type: media_type.to_string(),
                             source_file: path_str,
                             output_file: None,
                             output_size: None,

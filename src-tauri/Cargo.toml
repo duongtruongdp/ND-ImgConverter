@@ -23,8 +23,6 @@ webp = "0.3"
 base64 = "0.22"
 ab_glyph = "0.2"
 imageproc = "0.26"
-printpdf = "0.7"
-
 image = { version = "0.25", features = [
     "jpeg", 
     "png", 

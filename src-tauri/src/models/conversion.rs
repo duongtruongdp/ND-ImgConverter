@@ -24,6 +24,64 @@ pub enum OutputFormat {
     Astc,
 }
 
+impl OutputFormat {
+    pub fn is_supported_output(&self) -> bool {
+        matches!(
+            self,
+            Self::Jpeg
+                | Self::Png
+                | Self::Webp
+                | Self::Avif
+                | Self::Bmp
+                | Self::Ico
+                | Self::Tiff
+                | Self::Tga
+                | Self::Gif
+                | Self::Exr
+                | Self::Pbm
+                | Self::Pdf
+        )
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Jpeg => "JPEG",
+            Self::Png => "PNG",
+            Self::Webp => "WEBP",
+            Self::Avif => "AVIF",
+            Self::Bmp => "BMP",
+            Self::Ico => "ICO",
+            Self::Icns => "ICNS",
+            Self::Tiff => "TIFF",
+            Self::Tga => "TGA",
+            Self::Gif => "GIF",
+            Self::Exr => "EXR",
+            Self::Pbm => "PBM",
+            Self::Pdf => "PDF",
+            Self::Psd => "PSD",
+            Self::Dds => "DDS",
+            Self::Jp2 => "JP2",
+            Self::Ktx => "KTX",
+            Self::Pvr => "PVR",
+            Self::Astc => "ASTC",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OutputFormat;
+
+    #[test]
+    fn output_capabilities_match_available_encoders() {
+        assert!(OutputFormat::Png.is_supported_output());
+        assert!(OutputFormat::Exr.is_supported_output());
+        assert!(OutputFormat::Pdf.is_supported_output());
+        assert!(!OutputFormat::Psd.is_supported_output());
+        assert!(!OutputFormat::Astc.is_supported_output());
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TargetColorSpace {

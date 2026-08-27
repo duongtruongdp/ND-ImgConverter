@@ -4,9 +4,8 @@ use serde::Serialize;
 pub enum EngineError {
     #[error("File not found: {0}")]
     FileNotFound(String),
-    #[allow(dead_code)]
-    #[error("Unsupported format")]
-    UnsupportedFormat,
+    #[error("Output format is not supported by this build: {0}")]
+    UnsupportedOutputFormat(String),
     #[error("Failed to decode image: {0}")]
     DecodeFailed(String),
     #[error("Failed to encode image: {0}")]

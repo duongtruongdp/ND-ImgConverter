@@ -5,19 +5,12 @@ export type OutputFormat =
   | 'avif'
   | 'bmp' 
   | 'ico' 
-  | 'icns'
   | 'tiff' 
   | 'tga'
   | 'gif'
   | 'exr'
   | 'pbm'
-  | 'pdf'
-  | 'psd'
-  | 'dds'
-  | 'jp2'
-  | 'ktx'
-  | 'pvr'
-  | 'astc';
+  | 'pdf';
 
 export const ALL_OUTPUT_FORMATS: { label: string; value: OutputFormat; group: string }[] = [
   // Web & Modern
@@ -29,18 +22,11 @@ export const ALL_OUTPUT_FORMATS: { label: string; value: OutputFormat; group: st
   // Pro & Graphics
   { label: 'TIFF', value: 'tiff', group: 'Pro Graphics' },
   { label: 'EXR', value: 'exr', group: 'Pro Graphics' },
-  { label: 'PSD', value: 'psd', group: 'Pro Graphics' },
   { label: 'TGA', value: 'tga', group: 'Pro Graphics' },
   { label: 'BMP', value: 'bmp', group: 'Standard' },
   { label: 'PDF', value: 'pdf', group: 'Document' },
   // System Icons & Textures
   { label: 'ICO', value: 'ico', group: 'Icons' },
-  { label: 'ICNS', value: 'icns', group: 'Icons' },
-  { label: 'DDS', value: 'dds', group: 'Game/Texture' },
-  { label: 'KTX', value: 'ktx', group: 'Game/Texture' },
-  { label: 'ASTC', value: 'astc', group: 'Game/Texture' },
-  { label: 'PVR', value: 'pvr', group: 'Game/Texture' },
-  { label: 'JP2', value: 'jp2', group: 'Other' },
   { label: 'PBM', value: 'pbm', group: 'Other' },
 ];
 

@@ -8,7 +8,7 @@ type VideoInfo = { path: string; duration: number; width: number; height: number
 
 const time = (seconds: number) => new Date(seconds * 1000).toISOString().slice(11, 19);
 
-export const VideoToGifTab = () => {
+export const VideoToGifTab = ({ active = true }: { active?: boolean }) => {
   const [video, setVideo] = useState<VideoInfo | null>(null);
   const [inPoint, setInPoint] = useState(0);
   const [outPoint, setOutPoint] = useState(0);
@@ -34,6 +34,7 @@ export const VideoToGifTab = () => {
   };
 
   useEffect(() => {
+    if (!active) return;
     const unlistenPromise = getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === 'drop') {
         const candidate = event.payload.paths.find((path) => /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(path));
@@ -41,7 +42,7 @@ export const VideoToGifTab = () => {
       }
     });
     return () => { unlistenPromise.then((unlisten) => unlisten()); };
-  }, []);
+  }, [active]);
 
   const chooseVideo = async () => {
     const selected = await open({ multiple: false, filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'] }] });

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { OutputFormat, ResizeMode } from '../types/conversion';
+import { VideoCodec, VideoOutputFormat } from '../types/video';
 
 export type WatermarkPosition =
   | 'TopLeft'
@@ -52,6 +53,12 @@ export interface ConversionSettings {
   stripMetadata: boolean;
   watermark: WatermarkConfig;
   theme: 'dark' | 'light';
+  videoOutputFormat: VideoOutputFormat;
+  videoCodec: VideoCodec;
+  videoQuality: number;
+  videoAudio: boolean;
+  videoForceCfr: boolean;
+  videoTargetFps: string;
 }
 
 export interface SettingsState extends ConversionSettings {
@@ -67,6 +74,7 @@ export interface SettingsState extends ConversionSettings {
   setStripMetadata: (strip: boolean) => void;
   setWatermark: (watermark: WatermarkConfig) => void;
   setTheme: (theme: 'dark' | 'light') => void;
+  setVideoProfile: (profile: Partial<Pick<ConversionSettings, 'videoOutputFormat' | 'videoCodec' | 'videoQuality' | 'videoAudio' | 'videoForceCfr' | 'videoTargetFps'>>) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -93,6 +101,12 @@ export const useSettingsStore = create<SettingsState>()(
         scalePercent: 15,
       },
       theme: 'dark',
+      videoOutputFormat: 'webm',
+      videoCodec: 'vp9',
+      videoQuality: 80,
+      videoAudio: true,
+      videoForceCfr: false,
+      videoTargetFps: '30',
 
       setFormat: (format) => set({ format, activePresetId: null }),
       setQuality: (quality) => set({ quality, activePresetId: null }),
@@ -115,6 +129,7 @@ export const useSettingsStore = create<SettingsState>()(
       setStripMetadata: (stripMetadata: boolean) => set({ stripMetadata }),
       setWatermark: (watermark: WatermarkConfig) => set({ watermark }),
       setTheme: (theme) => set({ theme }),
+      setVideoProfile: (profile) => set(profile),
     }),
     {
       name: 'nd-image-converter-settings',

@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.6.3)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.8.2)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
   </a>
 </p>
 
@@ -27,9 +27,9 @@ No terminal or programming tools required. Simply download the pre-built install
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download .dmg](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.3/ND.Image.Converter_0.6.3_universal.dmg) |
-| **Windows** | `.exe` | x64 (64-bit) | [Download .exe](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.3/ND.Image.Converter_0.6.3_x64-setup.exe) |
-| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download .deb](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.6.3/ND.Image.Converter_0.6.3_amd64.deb) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download latest release](https://github.com/duongtruongdp/ND-ImgConverter/releases/latest) |
+| **Windows** | `.exe` | x64 (64-bit) | [Download latest release](https://github.com/duongtruongdp/ND-ImgConverter/releases/latest) |
+| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download latest release](https://github.com/duongtruongdp/ND-ImgConverter/releases/latest) |
 
 ### First-Time Launch Instructions
 
@@ -78,15 +78,17 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 - 🔊 **Audio preservation:** Choose whether to retain the source audio track during video conversion.
 - 📦 **Bundled FFmpeg runtime:** Release builds include the required FFmpeg and FFprobe runtime files for offline video processing.
 - 🖱 **Native drag and drop:** Drop image, folder, or video files directly into the relevant workspace.
+- 🖼 **Grab Stills:** Scrub local video timestamps and extract JPEG, PNG, or WEBP still frames.
 
 ### Workflow and desktop experience
 
 - 📂 **Batch and recursive folder processing:** Add multiple files or nested directories and process them in one operation.
-- 👀 **Watch folder automation:** Monitor an input directory and automatically convert new files as they arrive.
+- 👀 **Watch folder automation:** Monitor an input directory and route new image and video files using separate editable profiles.
+- 🔄 **Persistent tab sessions:** Keep queued files, video positions, trim points, and Watch Folder configuration while switching tabs.
 - 📁 **Native output-folder selection:** Choose an output directory through the operating system picker; defaults to the input folder.
 - 🔔 **GitHub release update checker:** Detect newer versions and open the official release download page.
 - 🖥 **Cross-platform desktop app:** Built with Tauri for macOS, Windows, and Linux with a lightweight native shell.
-- 🌙 **Dark, compact UI:** Consistent controls, keyboard-friendly workflows, progress feedback, and conversion status reporting.
+- 🌙 **Dark and Light UI:** Consistent semantic controls, previews, progress feedback, and conversion status reporting.
 
 ---
 

@@ -7,10 +7,17 @@ All notable changes and feature releases for **ND Image Converter** are document
 ### Added
 - Added explicit VFR to CFR video conversion with selectable target FPS.
 - Added persistent Dark and Light themes.
+- Added multi-video conversion with sequential FFmpeg processing, per-file status, progress events, and collision-safe output names.
+- Extended Watch Folder routing to support both image and video inputs with editable image/video profiles.
+- Added the Grab Stills workflow for timestamp-based JPEG, PNG, and WEBP frame extraction.
+- Preserved tab sessions while switching between the main workflows.
+- Standardized responsive video previews, profile controls, and Light/Dark theme surfaces across video workflows.
 
 ### Fixed
 - Added a native single-page PDF encoder for PNG and SVG exports.
 - Improved PDF conversion error propagation and removed unsupported PDF save fallbacks.
+- Corrected output capability exposure so unsupported image formats are not advertised.
+- Added explicit EXR RGBA32F conversion for reliable EXR export.
 
 ## [v0.8.0] - Native Output Folder Picker
 
@@ -27,7 +34,6 @@ All notable changes and feature releases for **ND Image Converter** are document
 * Added drag-and-drop video ingestion, local preview and bundled FFmpeg/FFprobe resources in release builds.
 * Added macOS Apple Silicon/Intel, Windows x64 and Linux x64 release targets.
 
-## [v0.6.3] - Updater Browser Launch Fix
 ## [v0.6.3] - Updater Browser Launch Fix
 
 * Open release links through Tauri's native opener plugin so the system browser launches reliably on macOS and Windows.

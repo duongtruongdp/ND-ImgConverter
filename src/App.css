@@ -2,15 +2,82 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
+  --theme-bg: #f4f6f8;
+  --theme-surface: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-surface-hover: #f1f5f9;
+  --theme-text-primary: #1f2937;
+  --theme-text-secondary: #475569;
+  --theme-text-muted: #64748b;
+  --theme-border: #dbe2ea;
+  --theme-border-strong: #cbd5e1;
+  --theme-disabled-bg: #e2e8f0;
+  --theme-disabled-text: #94a3b8;
+  --accent-text: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  --theme-bg: #0b0d10;
+  --theme-surface: #12141a;
+  --theme-surface-elevated: #12151b;
+  --theme-surface-hover: #202530;
+  --theme-text-primary: #f4f4f5;
+  --theme-text-secondary: #d4d4d8;
+  --theme-text-muted: #a1a1aa;
+  --theme-border: #27272a;
+  --theme-border-strong: #3f3f46;
+  --theme-disabled-bg: #27272a;
+  --theme-disabled-text: #71717a;
+  --accent-text: #ffffff;
+}
+
+/* All solid accent surfaces use the same high-contrast foreground. */
+[class~="bg-blue-600"] {
+  color: var(--accent-text);
+}
+
+.theme-surface-elevated {
+  background-color: var(--theme-surface-elevated);
+  border-color: var(--theme-border);
+  color: var(--theme-text-secondary);
+}
+
+.theme-surface-control {
+  background-color: var(--theme-surface);
+  border-color: var(--theme-border);
+  color: var(--theme-text-primary);
+}
+
+.theme-surface-control:hover {
+  background-color: var(--theme-surface-hover);
+  border-color: var(--theme-border-strong);
+}
+
+.theme-option {
+  color: var(--theme-text-secondary);
+}
+
+.theme-option:hover {
+  background-color: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+
+.theme-disabled-control {
+  background-color: var(--theme-disabled-bg);
+  color: var(--theme-disabled-text);
+}
+
+.theme-divider {
+  border-color: var(--theme-border);
 }
 
 :root[data-theme='light'] body {
-  background: #f4f6f8;
+  background: var(--theme-bg);
 }
 
 :root[data-theme='light'] .app-shell {
-  background: #f4f6f8;
-  color: #1f2937;
+  background: var(--theme-bg);
+  color: var(--theme-text-primary);
 }
 
 :root[data-theme='light'] [class*="bg-[#101216"],
@@ -36,4 +103,41 @@
 :root[data-theme='light'] [class*="border-zinc-800"],
 :root[data-theme='light'] [class*="border-zinc-700"] {
   border-color: #dbe2ea;
+}
+
+/* Normalize ordinary controls and information surfaces that still use legacy dark utility classes. */
+:root[data-theme='light'] input[class*="bg-zinc-900"],
+:root[data-theme='light'] [class*="bg-zinc-900"] {
+  background-color: var(--theme-surface);
+  color: var(--theme-text-primary);
+  border-color: var(--theme-border);
+}
+
+.app-media-preview {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-height: min(70vh, 42rem);
+  background: #000;
+  overflow: hidden;
+}
+
+.app-media-preview > video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+main > div > .relative.rounded-2xl.overflow-hidden.bg-black {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-height: min(70vh, 42rem);
+}
+
+main > div > .relative.rounded-2xl.overflow-hidden.bg-black > video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+  object-position: center;
 }

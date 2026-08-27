@@ -266,6 +266,11 @@ pub fn process_single_image(
     if !input_path.exists() {
         return Err(EngineError::FileNotFound(input_path_str.to_string()));
     }
+    if !options.format.is_supported_output() {
+        return Err(EngineError::UnsupportedOutputFormat(
+            options.format.display_name().to_string(),
+        ));
+    }
 
     // 1. Decode
     let mut current_img = decode_any_image(input_path)?;
@@ -307,19 +312,14 @@ pub fn process_single_image(
         OutputFormat::Avif => "avif",
         OutputFormat::Bmp => "bmp",
         OutputFormat::Ico => "ico",
-        OutputFormat::Icns => "icns",
         OutputFormat::Tiff => "tif",
         OutputFormat::Tga => "tga",
         OutputFormat::Gif => "gif",
         OutputFormat::Exr => "exr",
         OutputFormat::Pbm => "pbm",
         OutputFormat::Pdf => "pdf",
-        OutputFormat::Psd => "psd",
-        OutputFormat::Dds => "dds",
-        OutputFormat::Jp2 => "jp2",
-        OutputFormat::Ktx => "ktx",
-        OutputFormat::Pvr => "pvr",
-        OutputFormat::Astc => "astc",
+        OutputFormat::Icns | OutputFormat::Psd | OutputFormat::Dds | OutputFormat::Jp2
+        | OutputFormat::Ktx | OutputFormat::Pvr | OutputFormat::Astc => unreachable!("unsupported output format was rejected above"),
     };
 
     let output_path = parent_dir.join(format!("{}.{}", file_stem, new_ext));
@@ -390,11 +390,29 @@ pub fn process_single_image(
         OutputFormat::Pdf => {
             write_single_image_pdf(&processed_img, &output_path, options.quality)?;
         }
-        _ => {
+        OutputFormat::Avif | OutputFormat::Gif | OutputFormat::Pbm => {
             processed_img
                 .save(&output_path)
                 .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
         }
+        OutputFormat::Exr => {
+            let rgba = processed_img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            let float_image = ImageBuffer::from_fn(width, height, |x, y| {
+                let pixel = rgba.get_pixel(x, y);
+                Rgba([
+                    pixel[0] as f32 / 255.0,
+                    pixel[1] as f32 / 255.0,
+                    pixel[2] as f32 / 255.0,
+                    pixel[3] as f32 / 255.0,
+                ])
+            });
+            DynamicImage::ImageRgba32F(float_image)
+                .save(&output_path)
+                .map_err(|e| EngineError::EncodeFailed(e.to_string()))?;
+        }
+        OutputFormat::Icns | OutputFormat::Psd | OutputFormat::Dds | OutputFormat::Jp2
+        | OutputFormat::Ktx | OutputFormat::Pvr | OutputFormat::Astc => unreachable!("unsupported output format was rejected above"),
     }
 
     let output_size = std::fs::metadata(&output_path)?.len();
