@@ -53,25 +53,40 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 
 ---
 
-## ✨ Features (v0.6.0)
+## ✨ Key Features
 
-- 🔒 **100% Offline & Private:** Zero cloud uploads, no telemetry, no tracking — your files never leave your device.
-- ⚡ **High-Throughput Multi-threaded Engine:** Powered by Rust and `rayon` to utilize all CPU cores on both Apple Silicon and Intel/AMD processors.
-- 🖼 **Massive Format Support (50+ In / 19 Out):**
-  - **Standard Formats:** JPEG, PNG, WebP, AVIF, BMP, ICO, ICNS, TIFF, TGA, GIF, SVG, PSD, EXR, and more.
-  - **Camera RAW & DNG:** Native decoding for Canon (.CR2, .CR3), Adobe (.DNG), Sony (.ARW), Nikon (.NEF), and other major camera brands with accurate Bayer demosaicing.
-  - **Optimized HEIC/HEIF:** Direct hardware-accelerated decoding pipelines for instant mobile photo conversions.
-- 🛡 **Zero-Overhead EXIF & Metadata Stripper:** One-click toggle to strip camera parameters, thumbnails, and GPS location tags for maximum privacy and ultra-compact file sizes.
-- 🎨 **Pro Color Management (Little-CMS 2):** Built-in color profile transforms supporting Rec.709, sRGB, Display P3, and Adobe RGB.
-- 📊 **Real-time Quality Analyzer:** Dynamic bitrate and target file-size estimation before conversion.
-- 🎯 **Flexible Resize Modes:**
-  - Original dimensions
-  - Target Width (with automatic aspect-ratio lock)
-  - Percentage Scaling
-- 👁 **Before/After Split Comparison:** Interactive side-by-side visual inspector to preview compression fidelity.
-- 🤖 **Automated Watch Folder:** Background directory monitoring that converts new incoming files on the fly.
-- 🔔 **In-App Auto-Update Checker:** Alerts you directly when new GitHub releases are available.
-- 📂 **Recursive Directory Ingestion:** Drag-and-drop nested folders with one-click "Reveal in Finder / Explorer".
+### Image conversion and optimization
+
+- 🔒 **Privacy-first offline processing:** Files never leave the computer; no cloud upload, telemetry, or tracking.
+- ⚡ **Fast native engine:** Rust-based processing with `rayon` parallelism for responsive batch conversion.
+- 🖼 **Broad format support:** Convert common formats such as JPEG, PNG, WebP, AVIF, BMP, ICO, TIFF, TGA, GIF, EXR, and more.
+- 📷 **Camera RAW and DNG support:** Decode CR2, CR3, DNG, ARW, NEF, ORF, RAF, and other RAW formats through native demosaicing and embedded-preview handling.
+- 📱 **HEIC/HEIF support:** Import and convert modern phone-camera images locally.
+- 🎯 **Flexible resizing:** Preserve original dimensions, resize by target width with aspect-ratio preservation, or scale by percentage.
+- 🎚 **Quality and size estimation:** Adjust output quality and preview estimated output size before processing.
+- 🎨 **Color management:** Optional ICC color transformations using LittleCMS 2, including sRGB, Display P3, Adobe RGB, and Rec.709 workflows.
+- 🛡 **Metadata privacy controls:** Strip EXIF metadata, GPS coordinates, thumbnails, and other embedded metadata during export.
+- 🖋 **Watermark engine:** Add text or logo watermarks with configurable position, scale, opacity, and automatic image scaling.
+- 👁 **Before/after inspection:** Compare source and converted results with an interactive split-view preview.
+
+### Video tools
+
+- 🎞 **Video to GIF:** Convert H.264/H.265 MP4, MOV, MKV, WebM, AVI, and M4V videos into GIF locally.
+- ✂️ **Editor-style trim timeline:** Set in/out points by dragging timeline handles, use the integrated playback controls, or edit exact time values.
+- 🎛 **GIF export controls:** Configure output width, FPS, and quality with palette generation for better color results.
+- 🔁 **Video format converter:** Convert between MP4, MOV, MKV, and WebM containers with selectable H.264, H.265, VP8, VP9, and AV1 codecs.
+- 🔊 **Audio preservation:** Choose whether to retain the source audio track during video conversion.
+- 📦 **Bundled FFmpeg runtime:** Release builds include the required FFmpeg and FFprobe runtime files for offline video processing.
+- 🖱 **Native drag and drop:** Drop image, folder, or video files directly into the relevant workspace.
+
+### Workflow and desktop experience
+
+- 📂 **Batch and recursive folder processing:** Add multiple files or nested directories and process them in one operation.
+- 👀 **Watch folder automation:** Monitor an input directory and automatically convert new files as they arrive.
+- 📁 **Native output-folder selection:** Choose an output directory through the operating system picker; defaults to the input folder.
+- 🔔 **GitHub release update checker:** Detect newer versions and open the official release download page.
+- 🖥 **Cross-platform desktop app:** Built with Tauri for macOS, Windows, and Linux with a lightweight native shell.
+- 🌙 **Dark, compact UI:** Consistent controls, keyboard-friendly workflows, progress feedback, and conversion status reporting.
 
 ---
 

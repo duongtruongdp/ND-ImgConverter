@@ -8,17 +8,28 @@ use std::process::Command;
 
 fn tool(name: &str) -> String {
   if let Ok(custom) = std::env::var(format!("ND_{}", name.to_uppercase())) { return custom; }
-  let bundled = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| {
-    let resource_dir = if cfg!(target_os = "macos") { dir.join("../Resources") } else { dir.join("resources") };
-    resource_dir.join("binaries").join(name)
-  }));
-  if let Some(path) = bundled.filter(|path| path.is_file()) { return path.to_string_lossy().into(); }
+  if let Some(exe) = std::env::current_exe().ok() {
+    if let Some(dir) = exe.parent() {
+      let resource_roots = if cfg!(target_os = "macos") {
+        vec![dir.join("../Resources"), dir.join("../Resources/resources"), dir.join("resources")]
+      } else {
+        vec![dir.join("resources"), dir.join("../resources"), dir.join("resources/resources")]
+      };
+      for root in resource_roots {
+        let path = root.join("binaries").join(name);
+        if path.is_file() { return path.to_string_lossy().into(); }
+      }
+    }
+  }
   let candidates = if name == "ffmpeg" { vec!["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "ffmpeg"] } else { vec!["/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "ffprobe"] };
   candidates.into_iter().find(|path| *path == name || Path::new(path).is_file()).unwrap_or(name).into()
 }
 pub fn probe(path: &str) -> Result<VideoInfo, String> {
   let out = Command::new(tool("ffprobe")).args(["-v","error","-select_streams","v:0","-show_entries","stream=codec_name,width,height,duration","-of","json",path]).output().map_err(|e| format!("ffprobe unavailable: {e}"))?;
-  if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().to_string()); }
+  if !out.status.success() {
+    let detail = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    return Err(if detail.is_empty() { "FFprobe could not read this video".into() } else { detail });
+  }
   let root: serde_json::Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?; let s=&root["streams"][0];
   Ok(VideoInfo { path: path.into(), duration: s["duration"].as_str().and_then(|v|v.parse().ok()).or_else(||s["duration"].as_f64()).unwrap_or(0.0), width:s["width"].as_u64().unwrap_or(0) as u32, height:s["height"].as_u64().unwrap_or(0) as u32, codec:s["codec_name"].as_str().unwrap_or("unknown").into() })
 }
