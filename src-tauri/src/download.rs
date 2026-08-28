@@ -443,12 +443,18 @@ pub fn parse_metadata(json: &str) -> Result<DownloadMetadata, String> {
             };
             for item in formats {
                 let id = item["format_id"].as_str().unwrap_or_default();
-                let video_codec = item["vcodec"].as_str().filter(|v| *v != "none");
-                if id.is_empty() || video_codec.is_none() {
+                let raw_video_codec = item["vcodec"].as_str();
+                let video_codec = raw_video_codec.filter(|v| *v != "none");
+                let is_progressive = raw_video_codec.is_none()
+                    && item["acodec"].as_str().is_none()
+                    && item["url"].as_str().is_some();
+                if id.is_empty() || (video_codec.is_none() && !is_progressive) {
                     continue;
                 }
                 let ext = item["ext"].as_str().unwrap_or("video");
-                if !matches!(ext, "mp4" | "webm") || !has_compatible_audio(ext) {
+                if !matches!(ext, "mp4" | "webm")
+                    || (!is_progressive && !has_compatible_audio(ext))
+                {
                     continue;
                 }
                 let height = item["height"].as_u64();
@@ -456,7 +462,7 @@ pub fn parse_metadata(json: &str) -> Result<DownloadMetadata, String> {
                 let resolution = height
                     .map(|h| format!("{h}p"))
                     .or_else(|| item["format_note"].as_str().map(str::to_string));
-                let audio_available = has_compatible_audio(ext);
+                let audio_available = is_progressive || has_compatible_audio(ext);
                 let size = item["filesize"]
                     .as_u64()
                     .or_else(|| item["filesize_approx"].as_u64());
@@ -812,6 +818,18 @@ mod tests {
         ]}"#).unwrap();
         let variant = result.variants.iter().find(|v| v.label == "1080p · MP4").unwrap();
         assert!(variant.video_codec.as_deref().unwrap().starts_with("avc1"));
+    }
+
+    #[test]
+    fn keeps_progressive_av_video_without_codec_metadata() {
+        let metadata = parse_metadata(r#"{"title":"Facebook clip","formats":[
+            {"format_id":"sd","ext":"mp4","url":"https://cdn.example/sd.mp4"},
+            {"format_id":"hd","ext":"mp4","url":"https://cdn.example/hd.mp4"}
+        ]}"#).unwrap();
+        assert_eq!(metadata.variants.len(), 1);
+        assert_eq!(metadata.variants[0].label, "MP4");
+        assert!(metadata.variants[0].audio_available);
+        assert_eq!(metadata.variants[0].height, None);
     }
 
     #[test]
