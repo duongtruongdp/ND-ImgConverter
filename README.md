@@ -140,6 +140,8 @@ The output installation files will be generated in:
 - macOS: src-tauri/target/release/bundle/dmg/
 - Windows: src-tauri/target/release/bundle/nsis/
 
+For repository and contributor guidance, see [AGENTS.md](AGENTS.md).
+
 
 ## 🛠️ Troubleshooting
 
@@ -167,19 +169,16 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 
 
 ## 🗺 Roadmap
-[x] v0.1: Core Engine, Batch Conversion (JPG/PNG/WebP), Fast Thumbnails, Native Drag & Drop.
-
-[x] v0.2: Split-screen Before/After Image Comparison Slider, Presets Manager, Keyboard Shortcuts.
-
-[x] v0.3: Support 50+ inputs (including HEIC/RAW/SVG) and 19 modern output formats with dark minimalist UI.
-
-[x] v0.4: Live Watch Folder automation, ICC color management, instant output size estimation, and pixel-level comparison inspection.
-
-[x] v0.5: Integrate GitHub auto-update checker, optimize HEIC fast-path decoding, and polish installer branding.
-
-[x] v0.6: Watermark Engine, EXIF Stripper, and Linux Build Pipeline
-
-[ ] v1.0: Stable milestone release with full cross-platform parity.
+- [x] **v0.1** — Core Engine, Batch Conversion (JPEG/PNG/WebP), Fast Thumbnails, Native Drag & Drop.
+- [x] **v0.2** — Before/After Comparison Slider, Presets Manager, Keyboard Shortcuts.
+- [x] **v0.3** — 50+ input formats including HEIC/RAW/SVG, expanded output-format support, dark minimalist UI.
+- [x] **v0.4** — Live Watch Folder Automation, ICC Color Management, Output Size Estimation, Pixel-Level Comparison.
+- [x] **v0.5** — GitHub Update Checker, HEIC Fast-Path Optimization, Installer Branding.
+- [x] **v0.6** — Watermark Engine, EXIF Stripper, Linux Build Pipeline.
+- [x] **v0.7** — Video workflows: Video to GIF and core video conversion.
+- [x] **v0.8** — PDF/EXR fixes, 12 verified output formats, Light Theme, VFR→CFR, multi-video batch conversion, Watch Folder image/video profiles, Grab Stills, cross-tab session preservation, UI consistency.
+- [ ] **v0.9** — Online Video Downloader and downloader hardening/compatibility.
+- [ ] **v1.0** — Stable milestone with full cross-platform parity and production hardening.
 
 
 ## 📄 License
