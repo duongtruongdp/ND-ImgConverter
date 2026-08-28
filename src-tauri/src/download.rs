@@ -64,11 +64,22 @@ struct DownloaderError {
 }
 
 fn plugin_directory() -> Option<String> {
-    std::env::var("ND_YTDLP_PLUGIN_DIR")
+    let configured = std::env::var("ND_YTDLP_PLUGIN_DIR")
         .ok()
-        .filter(|path| std::path::Path::new(path).is_dir())
+        .filter(|path| plugin_layout_exists(std::path::Path::new(path)))
         .or_else(|| crate::video::resource_path("binaries/yt-dlp-plugins"))
         .or_else(|| crate::video::resource_path("yt-dlp-plugins"))
+        .filter(|path| plugin_layout_exists(std::path::Path::new(path)));
+    configured
+}
+
+fn plugin_layout_exists(root: &std::path::Path) -> bool {
+    if !root.is_dir() {
+        return false;
+    }
+    [root.to_path_buf(), root.join("bgutil-ytdlp-pot-provider")]
+        .into_iter()
+        .any(|candidate| candidate.join("yt_dlp_plugins").is_dir())
 }
 
 fn pot_provider_path() -> Option<String> {
@@ -90,6 +101,28 @@ fn pot_provider_path() -> Option<String> {
         })
 }
 
+fn provider_readiness(path: &str) -> String {
+    match Command::new(path).arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if version.is_empty() {
+                "ready".into()
+            } else {
+                format!("ready ({version})")
+            }
+        }
+        Ok(output) => {
+            let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if detail.is_empty() {
+                format!("failed (exit {})", output.status)
+            } else {
+                format!("failed ({})", detail.chars().take(160).collect::<String>())
+            }
+        }
+        Err(error) => format!("failed ({error})"),
+    }
+}
+
 fn append_provider_args(args: &mut Vec<String>) {
     if let Some(directory) = plugin_directory() {
         args.extend(["--plugin-dirs".into(), directory]);
@@ -104,7 +137,10 @@ fn append_provider_args(args: &mut Vec<String>) {
 
 fn provider_status() -> String {
     match (plugin_directory(), pot_provider_path()) {
-        (Some(plugin), Some(provider)) => format!("configured (plugin root: {plugin}; provider: {provider})"),
+        (Some(plugin), Some(provider)) => format!(
+            "configured (plugin root: {plugin}; provider: {provider}; {})",
+            provider_readiness(&provider)
+        ),
         (Some(plugin), None) => format!("provider binary missing (plugin root: {plugin})"),
         (None, _) => "plugin package missing".into(),
     }
@@ -115,6 +151,21 @@ fn detected_provider(detail: &str) -> Option<String> {
         line.split_once("PO Token Providers:")
             .map(|(_, value)| value.trim().to_string())
     })
+}
+
+fn provider_flow(detail: &str) -> &'static str {
+    let lower = detail.to_lowercase();
+    if lower.contains("retrieved a gvs po token") {
+        "detected -> invoked -> acquired"
+    } else if lower.contains("generating a gvs po token")
+        || lower.contains("executing command to get pot")
+    {
+        "detected -> invoked -> acquisition pending/failed"
+    } else if detected_provider(detail).is_some() {
+        "detected -> not invoked"
+    } else {
+        "not detected"
+    }
 }
 
 fn runtime_diagnostics(provider_label: &str) -> String {
@@ -134,6 +185,37 @@ fn error_json(kind: &str, message: &str, details: &str) -> String {
         details: details.chars().take(8000).collect(),
     })
     .unwrap_or_else(|_| message.into())
+}
+
+fn sanitize_details(detail: &str) -> String {
+    detail
+        .lines()
+        .filter(|line| {
+            let lower = line.to_lowercase();
+            !lower.contains("videoplayback")
+                && !lower.contains("googlevideo.com")
+                && !lower.contains("cookie")
+                && !lower.contains("authorization:")
+                && !lower.contains("po token:")
+        })
+        .map(|line| {
+            line.split_whitespace()
+                .map(|token| {
+                    if token.starts_with("http://") || token.starts_with("https://") {
+                        if token.contains('?') {
+                            token.split('?').next().unwrap_or("[redacted URL]")
+                        } else {
+                            "[redacted URL]"
+                        }
+                    } else {
+                        token
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn validate_url(url: &str) -> Result<(), String> {
@@ -185,11 +267,13 @@ fn yt_dlp_version() -> String {
 
 fn structured_error(detail: &str) -> String {
     let lower = detail.to_lowercase();
+    let token_acquired = lower.contains("retrieved a gvs po token");
     let diagnostics = format!(
-        "{}\nyt-dlp version: {}\n{}",
+        "{}\nPO Token flow: {}\nyt-dlp version: {}\n{}",
         runtime_diagnostics(&detected_provider(detail).unwrap_or_else(provider_status)),
+        provider_flow(detail),
         yt_dlp_version(),
-        detail.chars().take(8000).collect::<String>()
+        sanitize_details(detail).chars().take(8000).collect::<String>()
     );
     if lower.contains("sign in to confirm")
         || lower.contains("not a bot")
@@ -218,11 +302,18 @@ fn structured_error(detail: &str) -> String {
             "This URL or site is not supported by yt-dlp.",
             &diagnostics,
         )
+    } else if lower.contains("the page needs to be reloaded") {
+        error_json(
+            "YouTube session refresh required",
+            "YouTube rejected the current session. Reload the video page or retry without browser authentication.",
+            &diagnostics,
+        )
     } else if lower.contains("po token providers: none")
         || lower.contains("po token provider unavailable")
     {
         error_json("PO Token provider unavailable", "This YouTube stream requires a PO Token provider that is not available in this installation.", &diagnostics)
     } else if lower.contains("po token")
+        && !token_acquired
         && (lower.contains("failed") || lower.contains("error") || lower.contains("rejected"))
     {
         error_json("PO Token acquisition failed", "YouTube's PO Token could not be acquired for this stream. Try again or choose another quality.", &diagnostics)
@@ -580,5 +671,31 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(error["kind"], "PO Token provider unavailable");
+    }
+
+    #[test]
+    fn reports_acquired_po_token_without_classifying_it_as_failure() {
+        let detail = "[youtube] [pot:bgutil:cli] Retrieved a gvs PO Token for web client";
+        assert_eq!(provider_flow(detail), "detected -> invoked -> acquired");
+        assert!(!structured_error(detail).contains("PO Token acquisition failed"));
+    }
+
+    #[test]
+    fn classifies_youtube_reload_separately_from_po_token_failure() {
+        let error: serde_json::Value = serde_json::from_str(&structured_error(
+            "[youtube] The page needs to be reloaded.",
+        ))
+        .unwrap();
+        assert_eq!(error["kind"], "YouTube session refresh required");
+    }
+
+    #[test]
+    fn classifies_media_403_after_token_acquisition_as_media_access_denied() {
+        let error: serde_json::Value = serde_json::from_str(&structured_error(
+            "[youtube] Retrieved a gvs PO Token for web_safari client\nERROR: unable to download video data: HTTP Error 403: Forbidden",
+        ))
+        .unwrap();
+        assert_eq!(error["kind"], "Media access denied");
+        assert!(error["details"].as_str().unwrap().contains("acquired"));
     }
 }
