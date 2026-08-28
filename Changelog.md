@@ -2,6 +2,13 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.8.3] - 2026-08-28
+
+### Fixed
+- Fixed hover text and icon contrast across interactive controls.
+- Restored the Batch Convert `+ Add` button to the primary action appearance.
+- Updated `Ready` status badges to red while keeping `Done` badges green.
+
 ## [v0.8.2] - 2026-08-28
 
 ### Added
