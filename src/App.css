@@ -62,6 +62,52 @@
   color: var(--theme-text-primary);
 }
 
+.theme-option[class~="bg-blue-600"],
+.theme-option[class~="bg-blue-600"]:hover {
+  background-color: #2563eb;
+  color: var(--accent-text);
+}
+
+.app-nav-item:hover,
+.app-secondary-action:hover {
+  background-color: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+
+.app-primary-action {
+  background-color: #2563eb;
+  color: var(--accent-text);
+}
+
+.app-primary-action:hover {
+  background-color: #3b82f6;
+  color: var(--accent-text);
+}
+
+.app-status-ready {
+  background-color: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.app-status-done {
+  background-color: #dcfce7;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+:root[data-theme='dark'] .app-status-ready {
+  background-color: rgb(127 29 29 / 0.35);
+  border-color: rgb(248 113 113 / 0.35);
+  color: #fca5a5;
+}
+
+:root[data-theme='dark'] .app-status-done {
+  background-color: rgb(20 83 45 / 0.35);
+  border-color: rgb(74 222 128 / 0.35);
+  color: #86efac;
+}
+
 .theme-disabled-control {
   background-color: var(--theme-disabled-bg);
   color: var(--theme-disabled-text);

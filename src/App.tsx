@@ -306,7 +306,7 @@ export default function App() {
               className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentTab === 'converter'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  : 'app-nav-item text-zinc-400'
               }`}
             >
               <Layers className="w-3.5 h-3.5" /> Batch Convert
@@ -316,19 +316,19 @@ export default function App() {
               className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentTab === 'automation'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                  : 'app-nav-item text-zinc-400'
               }`}
             >
               <Activity className="w-3.5 h-3.5" /> Watch Folder
             </button>
             <button
               onClick={() => setCurrentTab('video')}
-              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}
+              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}
             >
               <Activity className="w-3.5 h-3.5" /> Video to GIF
             </button>
-            <button onClick={() => setCurrentTab('video-converter')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-converter' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><ArrowRight className="w-3.5 h-3.5" /> Video Convert</button>
-            <button onClick={() => setCurrentTab('grab-stills')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'grab-stills' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><Camera className="w-3.5 h-3.5" /> Grab Stills</button>
+            <button onClick={() => setCurrentTab('video-converter')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-converter' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}><ArrowRight className="w-3.5 h-3.5" /> Video Convert</button>
+            <button onClick={() => setCurrentTab('grab-stills')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'grab-stills' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}><Camera className="w-3.5 h-3.5" /> Grab Stills</button>
           </div>
         </div>
 
@@ -352,7 +352,7 @@ export default function App() {
                     className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                       settings.activePresetId === p.id
                         ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                        : 'app-nav-item text-zinc-400'
                     }`}
                   >
                     {p.name}
@@ -364,7 +364,7 @@ export default function App() {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={handleSelectFiles}
-                    className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#181c24] hover:bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
+                    className="app-primary-action text-[11px] font-medium px-3 py-1.5 rounded-lg border border-blue-500/60 flex items-center gap-1.5 transition cursor-pointer"
                   >
                     <Plus className="w-3 h-3" /> Add
                   </button>
@@ -450,7 +450,7 @@ export default function App() {
 
                       <div className="flex items-center gap-2.5">
                         {file.status === 'queued' && (
-                          <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-0.5 rounded-md border border-zinc-700/40">Ready</span>
+                          <span className="app-status-ready text-[10px] px-2 py-0.5 rounded-md border">Ready</span>
                         )}
                         {file.status === 'processing' && (
                           <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 flex items-center gap-1">
@@ -459,7 +459,7 @@ export default function App() {
                         )}
                         {file.status === 'completed' && (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                            <span className="app-status-done text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Done
                             </span>
                             <button
