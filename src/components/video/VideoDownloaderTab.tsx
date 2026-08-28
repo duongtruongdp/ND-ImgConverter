@@ -50,7 +50,7 @@ export const VideoDownloaderTab = ({ active = true }: { active?: boolean }) => {
     if (!metadata || !selectedFormat || busy) return;
     setBusy(true); setError(null); setMessage(''); setProgress({ status: 'starting' });
     const selected = metadata.variants.find((variant) => variant.formatId === selectedFormat);
-    try { const output = await invoke<string>('download_video_url', { request: { url, formatId: selectedFormat, audioAvailable: selected?.audioAvailable ?? false, maxHeight: selected?.height ?? null, authBrowser: authBrowser === 'none' ? null : authBrowser, outputDirectory: directory || null } }); setMessage(`Saved: ${output}`); }
+    try { const output = await invoke<string>('download_video_url', { request: { url, formatId: selectedFormat, audioAvailable: selected?.audioAvailable ?? false, maxHeight: selected?.height ?? null, container: selected?.container ?? null, authBrowser: authBrowser === 'none' ? null : authBrowser, outputDirectory: directory || null } }); setMessage(`Saved: ${output}`); }
     catch (e) { setError(parseDownloaderError(e)); } finally { setBusy(false); }
   };
 

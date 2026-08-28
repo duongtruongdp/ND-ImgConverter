@@ -36,6 +36,7 @@ pub struct DownloadRequest {
     pub format_id: String,
     pub audio_available: bool,
     pub max_height: Option<u64>,
+    pub container: Option<String>,
     pub auth_browser: Option<String>,
     pub output_directory: Option<String>,
 }
@@ -169,9 +170,13 @@ fn provider_flow(detail: &str) -> &'static str {
 }
 
 fn runtime_diagnostics(provider_label: &str) -> String {
+    let version = yt_dlp_version();
     format!(
-        "yt-dlp path: {}\nplugin root: {}\nbgutil-pot path: {}\nPO Token provider: {}",
+        "yt-dlp path: {}\nyt-dlp source: {}\nyt-dlp version: {} ({})\nplugin root: {}\nbgutil-pot path: {}\nPO Token provider: {}",
         crate::video::tool("yt-dlp"),
+        yt_dlp_source(),
+        version,
+        yt_dlp_version_status(&version),
         plugin_directory().unwrap_or_else(|| "<missing>".into()),
         pot_provider_path().unwrap_or_else(|| "<missing>".into()),
         provider_label,
@@ -265,6 +270,27 @@ fn yt_dlp_version() -> String {
         .unwrap_or_else(|| "unavailable".into())
 }
 
+fn yt_dlp_source() -> &'static str {
+    if std::env::var_os("ND_YTDLP").is_some() {
+        "ND_YTDLP override"
+    } else if crate::video::resource_path("binaries/yt-dlp")
+        .is_some_and(|path| std::path::Path::new(&path).is_file())
+    {
+        "bundled yt-dlp"
+    } else {
+        "system fallback"
+    }
+}
+
+fn yt_dlp_version_status(version: &str) -> String {
+    let expected = option_env!("ND_EXPECTED_YTDLP_VERSION").unwrap_or("unknown");
+    if version == expected {
+        format!("matches pinned {expected}")
+    } else {
+        format!("expected {expected}, actual {version}")
+    }
+}
+
 fn structured_error(detail: &str) -> String {
     let lower = detail.to_lowercase();
     let token_acquired = lower.contains("retrieved a gvs po token");
@@ -346,6 +372,38 @@ fn structured_error(detail: &str) -> String {
     }
 }
 
+fn verify_output(path: &str, expected_container: &str, audio_required: bool) -> Result<(), String> {
+    let output = Command::new(crate::video::tool("ffprobe"))
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=format_name:stream=codec_type",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            path,
+        ])
+        .output()
+        .map_err(|error| format!("Could not verify downloaded output: {error}"))?;
+    if !output.status.success() {
+        return Err("FFprobe could not read the downloaded output.".into());
+    }
+    let report = String::from_utf8_lossy(&output.stdout).to_lowercase();
+    let container_ok = match expected_container {
+        "mp4" => report.contains("mp4") || report.contains("mov"),
+        "webm" => report.contains("webm") || report.contains("matroska"),
+        _ => true,
+    };
+    let has_video = report.lines().any(|line| line == "video");
+    let has_audio = report.lines().any(|line| line == "audio");
+    if !container_ok || !has_video || (audio_required && !has_audio) {
+        return Err(format!(
+            "Downloaded output did not match the requested {expected_container} video contract."
+        ));
+    }
+    Ok(())
+}
+
 pub fn build_analyze_args(request: &AnalyzeRequest) -> Result<Vec<String>, String> {
     let mut args = Vec::new();
     append_provider_args(&mut args);
@@ -372,6 +430,17 @@ pub fn parse_metadata(json: &str) -> Result<DownloadMetadata, String> {
         .as_array()
         .map(|formats| {
             let mut result = Vec::new();
+            let has_compatible_audio = |container: &str| {
+                formats.iter().any(|audio| {
+                    audio["vcodec"].as_str() == Some("none")
+                        && audio["acodec"].as_str().is_some_and(|codec| codec != "none")
+                        && match container {
+                            "mp4" => matches!(audio["ext"].as_str(), Some("m4a" | "mp4")),
+                            "webm" => audio["ext"].as_str() == Some("webm"),
+                            _ => false,
+                        }
+                })
+            };
             for item in formats {
                 let id = item["format_id"].as_str().unwrap_or_default();
                 let video_codec = item["vcodec"].as_str().filter(|v| *v != "none");
@@ -379,20 +448,22 @@ pub fn parse_metadata(json: &str) -> Result<DownloadMetadata, String> {
                     continue;
                 }
                 let ext = item["ext"].as_str().unwrap_or("video");
+                if !matches!(ext, "mp4" | "webm") || !has_compatible_audio(ext) {
+                    continue;
+                }
                 let height = item["height"].as_u64();
                 let width = item["width"].as_u64();
                 let resolution = height
                     .map(|h| format!("{h}p"))
                     .or_else(|| item["format_note"].as_str().map(str::to_string));
-                let audio_available = item["acodec"].as_str().is_some_and(|v| v != "none");
+                let audio_available = has_compatible_audio(ext);
                 let size = item["filesize"]
                     .as_u64()
                     .or_else(|| item["filesize_approx"].as_u64());
-                let label = match (resolution.as_deref(), width, audio_available) {
-                    (Some(res), _, true) => format!("{res} · {ext} · audio"),
-                    (Some(res), _, false) => format!("{res} · {ext} · video only"),
-                    (None, Some(w), true) => format!("{w}px · {ext} · audio"),
-                    _ => format!("{ext} · video only"),
+                let label = match (resolution.as_deref(), width) {
+                    (Some(res), _) => format!("{res} · {}", ext.to_uppercase()),
+                    (None, Some(w)) => format!("{w}px · {}", ext.to_uppercase()),
+                    _ => ext.to_uppercase(),
                 };
                 result.push(DownloadVariant {
                     format_id: id.to_string(),
@@ -406,11 +477,16 @@ pub fn parse_metadata(json: &str) -> Result<DownloadMetadata, String> {
                 });
             }
             result.sort_by(|a, b| {
-                b.resolution
-                    .cmp(&a.resolution)
+                b.height
+                    .cmp(&a.height)
+                    .then_with(|| b.audio_available.cmp(&a.audio_available))
+                    .then_with(|| a.container.cmp(&b.container))
+                    .then_with(|| codec_rank(&a.video_codec).cmp(&codec_rank(&b.video_codec)))
                     .then_with(|| a.format_id.cmp(&b.format_id))
             });
-            result.dedup_by(|a, b| a.format_id == b.format_id);
+            result.dedup_by(|a, b| {
+                a.height == b.height && a.container == b.container
+            });
             result
         })
         .unwrap_or_default();
@@ -430,6 +506,28 @@ pub fn parse_metadata(json: &str) -> Result<DownloadMetadata, String> {
         po_token_provider: None,
         variants,
     })
+}
+
+fn codec_rank(codec: &Option<String>) -> u8 {
+    let codec = codec.as_deref().unwrap_or_default().to_lowercase();
+    if codec.starts_with("avc1") || codec.starts_with("avc3") {
+        0
+    } else if codec.starts_with("av01") {
+        1
+    } else if codec.starts_with("vp09") || codec.starts_with("vp9") {
+        2
+    } else {
+        3
+    }
+}
+
+fn video_selector(height: u64, container: &str, codecs: &[&str]) -> String {
+    let alternatives = codecs
+        .iter()
+        .map(|codec| format!("bestvideo[height={height}][ext={container}][vcodec^={codec}]"))
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("({alternatives})")
 }
 
 pub fn analyze(request: &AnalyzeRequest) -> Result<DownloadMetadata, String> {
@@ -462,7 +560,17 @@ pub fn build_download_args(
     output_template: &str,
 ) -> Result<Vec<String>, String> {
     let format_selector = if let Some(height) = request.max_height.filter(|height| *height > 0) {
-        format!("bestvideo[height={height}]+bestaudio")
+        match request.container.as_deref() {
+            Some("mp4") => format!(
+                "{}+(bestaudio[ext=m4a]/bestaudio[ext=mp4])",
+                video_selector(height, "mp4", &["avc1", "avc3", "av01", "vp09", "vp9"])
+            ),
+            Some("webm") => format!(
+                "{}+bestaudio[ext=webm]",
+                video_selector(height, "webm", &["vp09", "vp9", "av01"])
+            ),
+            _ => format!("bestvideo[height={height}]+bestaudio"),
+        }
     } else if request.audio_available {
         request.format_id.clone()
     } else {
@@ -479,6 +587,9 @@ pub fn build_download_args(
         "--output".into(),
         output_template.into(),
     ];
+    if let Some(container) = request.container.as_deref().filter(|value| matches!(*value, "mp4" | "webm")) {
+        args.extend(["--merge-output-format".into(), container.into()]);
+    }
     append_provider_args(&mut args);
     append_auth_args(&mut args, request.auth_browser.as_deref())?;
     args.push(request.url.trim().into());
@@ -565,6 +676,16 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
                     detail: Some(line.clone()),
                 },
             );
+        } else if let Some((_, path)) = line.split_once("Merging formats into ") {
+            output_path = Some(path.trim_matches('"').trim().to_string());
+            let _ = app.emit(
+                "download-progress",
+                DownloadProgress {
+                    status: "processing".into(),
+                    percent: None,
+                    detail: Some(line.clone()),
+                },
+            );
         } else if line.starts_with("[Merger]") || line.starts_with("[ExtractAudio]") {
             let _ = app.emit(
                 "download-progress",
@@ -586,6 +707,14 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
     if !status.success() {
         return Err(structured_error(detail.trim()));
     }
+    if let Some(container) = request.container.as_deref() {
+        if let Some(path) = output_path.as_deref() {
+            verify_output(path, container, request.audio_available)
+                .map_err(|error| {
+                    error_json("Output verification failed", &error, &sanitize_details(&detail))
+                })?;
+        }
+    }
     let result = output_path.unwrap_or_else(|| directory.to_string_lossy().to_string());
     let _ = app.emit(
         "download-progress",
@@ -603,9 +732,13 @@ mod tests {
     use super::*;
     #[test]
     fn normalizes_formats() {
-        let metadata = parse_metadata(r#"{"title":"Demo","formats":[{"format_id":"18","ext":"mp4","width":1280,"height":720,"vcodec":"avc1","acodec":"mp4a","filesize":100},{"format_id":"137","ext":"mp4","height":1080,"vcodec":"avc1","acodec":"none"}]}"#).unwrap();
-        assert_eq!(metadata.variants.len(), 2);
-        assert!(metadata.variants.iter().any(|v| v.audio_available));
+        let metadata = parse_metadata(r#"{"title":"Demo","formats":[{"format_id":"18","ext":"mp4","width":1280,"height":720,"vcodec":"avc1","acodec":"mp4a","filesize":100},{"format_id":"136","ext":"mp4","height":720,"vcodec":"avc1","acodec":"none"},{"format_id":"247","ext":"webm","height":720,"vcodec":"vp9","acodec":"none"},{"format_id":"137","ext":"mp4","height":1080,"vcodec":"avc1","acodec":"none"},{"format_id":"140","ext":"m4a","vcodec":"none","acodec":"mp4a"},{"format_id":"251","ext":"webm","vcodec":"none","acodec":"opus"}]}"#).unwrap();
+        assert_eq!(metadata.variants.len(), 3);
+        let hd = metadata.variants.iter().find(|v| v.height == Some(720)).unwrap();
+        assert!(hd.audio_available);
+        assert_eq!(hd.label, "720p · MP4");
+        assert!(!metadata.variants.iter().any(|v| v.label.contains("video only")));
+        assert!(metadata.variants.iter().any(|v| v.label == "720p · WEBM"));
     }
     #[test]
     fn rejects_invalid_url() {
@@ -622,17 +755,80 @@ mod tests {
             format_id: "137".into(),
             audio_available: false,
             max_height: Some(1080),
+            container: Some("mp4".into()),
             auth_browser: Some("chrome".into()),
             output_directory: None,
         };
         let args = build_download_args(&request, "/tmp/%(title)s.%(ext)s").unwrap();
         assert!(args.contains(&"--no-overwrites".into()));
-        assert!(args
-            .iter()
-            .any(|value| value == "bestvideo[height=1080]+bestaudio"));
+        let selector = args.iter().find(|value| value.contains("[height=1080][ext=mp4]")).unwrap();
+        assert!(selector.contains("[vcodec^=avc1]"));
+        assert!(selector.contains("[vcodec^=av01]"));
+        assert!(selector.contains("[vcodec^=vp09]"));
+        assert!(selector.contains("bestaudio[ext=m4a]/bestaudio[ext=mp4]"));
+        assert!(args.iter().any(|value| value == "mp4"));
         assert!(args
             .windows(2)
             .any(|pair| pair == ["--cookies-from-browser", "chrome"]));
+    }
+
+    #[test]
+    fn builds_container_specific_exact_height_selectors() {
+        let base = DownloadRequest {
+            url: "https://example.com/video".into(),
+            format_id: "raw".into(),
+            audio_available: true,
+            max_height: Some(1080),
+            container: Some("mp4".into()),
+            auth_browser: None,
+            output_directory: None,
+        };
+        let mp4_args = build_download_args(&base, "/tmp/%(title)s.%(ext)s").unwrap();
+        assert!(mp4_args.iter().any(|value| value.contains("[height=1080][ext=mp4]")));
+        assert!(mp4_args.iter().any(|value| value == "mp4"));
+
+        let webm = DownloadRequest { container: Some("webm".into()), ..base };
+        let webm_args = build_download_args(&webm, "/tmp/%(title)s.%(ext)s").unwrap();
+        let webm_selector = webm_args.iter().find(|value| value.contains("[height=1080][ext=webm]")).unwrap();
+        assert!(webm_selector.contains("[vcodec^=vp09]"));
+        assert!(webm_selector.contains("[vcodec^=av01]"));
+        assert!(webm_selector.ends_with("+bestaudio[ext=webm]"));
+        assert!(webm_args.iter().any(|value| value == "webm"));
+    }
+
+    #[test]
+    fn does_not_advertise_mp4_without_mp4_compatible_audio() {
+        let result = parse_metadata(r#"{"title":"Demo","formats":[{"format_id":"248","ext":"mp4","height":1080,"vcodec":"vp9","acodec":"none"},{"format_id":"251","ext":"webm","vcodec":"none","acodec":"opus"}]}"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn prefers_h264_then_av1_then_vp9_for_mp4_quality() {
+        let result = parse_metadata(r#"{"title":"Demo","formats":[
+            {"format_id":"vp9-1080","ext":"mp4","height":1080,"vcodec":"vp09.00.51.08","acodec":"none"},
+            {"format_id":"av1-1080","ext":"mp4","height":1080,"vcodec":"av01.0.08M.08","acodec":"none"},
+            {"format_id":"h264-1080","ext":"mp4","height":1080,"vcodec":"avc1.640028","acodec":"none"},
+            {"format_id":"m4a","ext":"m4a","vcodec":"none","acodec":"mp4a"}
+        ]}"#).unwrap();
+        let variant = result.variants.iter().find(|v| v.label == "1080p · MP4").unwrap();
+        assert!(variant.video_codec.as_deref().unwrap().starts_with("avc1"));
+    }
+
+    #[test]
+    fn container_selectors_keep_exact_height_without_transcoding() {
+        let request = DownloadRequest {
+            url: "https://example.com/video".into(),
+            format_id: "raw".into(),
+            audio_available: true,
+            max_height: Some(720),
+            container: Some("mp4".into()),
+            auth_browser: None,
+            output_directory: None,
+        };
+        let args = build_download_args(&request, "/tmp/%(title)s.%(ext)s").unwrap();
+        assert!(args.iter().any(|value| value.contains("[height=720]")));
+        assert!(!args.iter().any(|value| value == "--recode-video"));
+        assert!(!args.iter().any(|value| value.contains("transcode")));
     }
 
     #[test]
@@ -697,5 +893,15 @@ mod tests {
         .unwrap();
         assert_eq!(error["kind"], "Media access denied");
         assert!(error["details"].as_str().unwrap().contains("acquired"));
+    }
+
+    #[test]
+    fn sanitizes_sensitive_media_details() {
+        let sanitized = sanitize_details(
+            "https://rr.googlevideo.com/videoplayback?sig=secret\nAuthorization: Bearer secret\nPO Token: secret\n[youtube] SABR request failed",
+        );
+        assert!(!sanitized.contains("googlevideo"));
+        assert!(!sanitized.contains("secret"));
+        assert!(sanitized.contains("SABR request failed"));
     }
 }

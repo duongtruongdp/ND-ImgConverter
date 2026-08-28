@@ -78,23 +78,25 @@ jobs:
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
+          YTDLP_VERSION="$(node -p "require('./scripts/downloader-versions.json').ytDlpVersion")"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp.exe "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${YTDLP_VERSION}/yt-dlp.exe"
             cp src-tauri/binaries/yt-dlp.exe src-tauri/binaries/yt-dlp
           elif [ "${{ runner.os }}" = "macOS" ]; then
-            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos_arm64
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${YTDLP_VERSION}/yt-dlp_macos"
             chmod +x src-tauri/binaries/yt-dlp
           else
-            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${YTDLP_VERSION}/yt-dlp_linux"
             chmod +x src-tauri/binaries/yt-dlp
           fi
+          actual="$(src-tauri/binaries/yt-dlp --version)"
+          test "$actual" = "$YTDLP_VERSION"
 
       - name: Bundle pinned YouTube PO Token provider
         shell: bash
-        env:
-          BGUTIL_VERSION: v0.8.1
         run: |
           set -euo pipefail
+          BGUTIL_VERSION="$(node -p "require('./scripts/downloader-versions.json').bgutilVersion")"
           mkdir -p src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
           curl -L --fail --retry 3 -o /tmp/bgutil-ytdlp-pot-provider.zip "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-ytdlp-pot-provider-rs.zip"
           unzip -q /tmp/bgutil-ytdlp-pot-provider.zip -d src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
