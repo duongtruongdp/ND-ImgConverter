@@ -1,10 +1,11 @@
 {
   "name": "nd-image-converter",
   "private": true,
-  "version": "0.8.2",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prepare:ytdlp-pot": "node scripts/ensure-ytdlp-pot.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

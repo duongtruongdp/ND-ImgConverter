@@ -62,7 +62,7 @@ export const VideoConverterTab = ({ active = true }: { active?: boolean }) => {
     if (!videos.length || busy) return;
     setBusy(true); setMessage(''); setProgress(`Converting 1 of ${videos.length}`);
     try {
-      const outputs = await invoke<string[]>('convert_videos', { inputPaths: videos.map((video) => video.path), outputFormat: settings.videoOutputFormat, videoCodec: settings.videoCodec, quality: settings.videoQuality, audio: settings.videoAudio, outputDirectory: outputDirectory || null, forceCfr: settings.videoForceCfr, targetFps: settings.videoForceCfr ? Number(settings.videoTargetFps) : null });
+      const outputs = await invoke<string[]>('convert_videos', { batch: { inputPaths: videos.map((video) => video.path), outputFormat: settings.videoOutputFormat, videoCodec: settings.videoCodec, quality: settings.videoQuality, audio: settings.videoAudio, outputDirectory: outputDirectory || null, forceCfr: settings.videoForceCfr, targetFps: settings.videoForceCfr ? Number(settings.videoTargetFps) : null } });
       setMessage(`Completed ${outputs.length} of ${videos.length} video(s).`);
     } catch (error) { setMessage(String(error)); } finally { setBusy(false); }
   };

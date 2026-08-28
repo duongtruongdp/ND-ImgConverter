@@ -2,6 +2,19 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.9.0] - 2026-08-28
+
+### Added
+- Added the Video Downloader tab for analyzing public video URLs, selecting available video formats, downloading with progress, and saving to a chosen folder.
+- Added bundled `yt-dlp` release assets for macOS, Windows, and Linux while reusing the bundled FFmpeg runtime for stream merging.
+- Added the pinned `bgutil-ytdlp-pot-provider-rs` v0.8.1 plugin and native provider binary to release bundles for YouTube PO Token requests.
+
+### Diagnostics
+- Added runtime PO Token provider detection and distinct unavailable/acquisition-failed error categories while keeping technical yt-dlp details behind the existing details disclosure.
+
+### Safety
+- Downloader requests are limited to one URL at a time, disable playlist expansion, avoid overwriting existing files, and do not implement DRM or login bypass. Browser cookies are read only when explicitly selected by the user and are never stored or uploaded.
+
 ## [v0.8.2] - 2026-08-28
 
 ### Added

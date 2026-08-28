@@ -11,7 +11,7 @@ on:
       release_tag:
         description: "Release tag to build"
         required: true
-        default: "v0.8.1"
+        default: "v0.9.0"
 
 jobs:
   release:
@@ -74,6 +74,43 @@ jobs:
             chmod +x src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe
           fi
 
+      - name: Bundle yt-dlp downloader
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+            cp src-tauri/binaries/yt-dlp.exe src-tauri/binaries/yt-dlp
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos_arm64
+            chmod +x src-tauri/binaries/yt-dlp
+          else
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
+            chmod +x src-tauri/binaries/yt-dlp
+          fi
+
+      - name: Bundle pinned YouTube PO Token provider
+        shell: bash
+        env:
+          BGUTIL_VERSION: v0.8.1
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
+          curl -L --fail --retry 3 -o /tmp/bgutil-ytdlp-pot-provider.zip "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-ytdlp-pot-provider-rs.zip"
+          unzip -q /tmp/bgutil-ytdlp-pot-provider.zip -d src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot.exe "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-pot-windows-x86_64.exe"
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-pot-macos-aarch64"
+            chmod +x src-tauri/binaries/bgutil-pot
+          else
+            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-pot-linux-x86_64"
+            chmod +x src-tauri/binaries/bgutil-pot
+          fi
+      - name: Add downloader resources to release bundle
+        shell: bash
+        run: node -e "const fs=require('fs'); const file='src-tauri/tauri.conf.json'; const config=JSON.parse(fs.readFileSync(file,'utf8')); const extra=['binaries/yt-dlp','binaries/yt-dlp-plugins','binaries/bgutil-pot','binaries/bgutil-pot.exe'].filter(fs.existsSync); config.bundle.resources=[...(config.bundle.resources||[]),...extra]; fs.writeFileSync(file, JSON.stringify(config,null,2)+'\\n');"
+
       - name: Bundle macOS FFmpeg dependencies
         if: startsWith(matrix.platform, 'macos')
         shell: bash
@@ -126,8 +163,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LCMS2_STATIC: '1'
         with:
-          tagName: ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.8.1-dev.{0}', github.run_number) || github.ref_name) }}
-          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.8.1-dev.{0}', github.run_number) || github.ref_name) }}"
+          tagName: ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.9.0-dev.{0}', github.run_number) || github.ref_name) }}
+          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.9.0-dev.{0}', github.run_number) || github.ref_name) }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

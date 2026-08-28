@@ -1,23 +1,22 @@
-mod watermark;
+mod download;
 mod engine;
 mod errors;
 mod models;
 mod video;
+mod watermark;
 
+use rayon::prelude::*;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use rayon::prelude::*;
-use std::path::Path;
 
 use crate::engine::pipeline::{
     estimate_single_file_size, get_image_metadata, process_single_image,
 };
 use crate::engine::watcher::{start_folder_watcher, stop_folder_watcher, FolderWatcherState};
 use crate::errors::EngineError;
-use crate::models::conversion::{
-    ConversionOptions, ImageMetadata, OutputFormat, ProgressPayload,
-};
+use crate::models::conversion::{ConversionOptions, ImageMetadata, OutputFormat, ProgressPayload};
 
 pub struct AppState {
     pub is_cancelled: Arc<AtomicBool>,
@@ -39,8 +38,29 @@ async fn probe_video(path: String) -> Result<video::VideoInfo, String> {
 }
 
 #[tauri::command]
+async fn analyze_video_url(
+    request: download::AnalyzeRequest,
+) -> Result<download::DownloadMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || download::analyze(&request))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn download_video_url(
+    app: AppHandle,
+    request: download::DownloadRequest,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || download::download(app, request))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn grab_video_still(options: video::StillOptions) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || video::extract_still(options)).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || video::extract_still(options))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -52,7 +72,9 @@ async fn export_video_to_gif(options: video::GifOptions) -> Result<String, Strin
 
 #[tauri::command]
 async fn convert_video(options: video::VideoConvertOptions) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || video::convert(options)).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || video::convert(options))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[derive(serde::Deserialize)]
@@ -86,25 +108,85 @@ async fn convert_videos(app: AppHandle, batch: VideoBatchOptions) -> Result<Vec<
         let mut results = Vec::new();
         let mut used_outputs = std::collections::HashSet::new();
         for (index, input_path) in batch.input_paths.into_iter().enumerate() {
-            let _ = app.emit("video-batch-progress", VideoBatchProgress { file_path: input_path.clone(), status: "converting".into(), output_path: None, error: None, completed: index, total });
+            let _ = app.emit(
+                "video-batch-progress",
+                VideoBatchProgress {
+                    file_path: input_path.clone(),
+                    status: "converting".into(),
+                    output_path: None,
+                    error: None,
+                    completed: index,
+                    total,
+                },
+            );
             let source = Path::new(&input_path);
-            let directory = batch.output_directory.clone().map(std::path::PathBuf::from).unwrap_or_else(|| source.parent().unwrap_or(Path::new(".")).to_path_buf());
-            let stem = source.file_stem().and_then(|value| value.to_str()).unwrap_or("output");
+            let directory = batch
+                .output_directory
+                .clone()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| source.parent().unwrap_or(Path::new(".")).to_path_buf());
+            let stem = source
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or("output");
             let mut suffix = 0;
             let output_filename = loop {
-                let name = if suffix == 0 { format!("{stem}.{}", batch.output_format) } else { format!("{stem}-{suffix}.{}", batch.output_format) };
+                let name = if suffix == 0 {
+                    format!("{stem}.{}", batch.output_format)
+                } else {
+                    format!("{stem}-{suffix}.{}", batch.output_format)
+                };
                 let candidate = directory.join(&name);
-                if !candidate.exists() && used_outputs.insert(candidate) { break name; }
+                if !candidate.exists() && used_outputs.insert(candidate) {
+                    break name;
+                }
                 suffix += 1;
             };
-            let result = video::convert(video::VideoConvertOptions { input_path: input_path.clone(), output_format: batch.output_format.clone(), video_codec: batch.video_codec.clone(), quality: batch.quality, audio: batch.audio, output_directory: batch.output_directory.clone(), force_cfr: batch.force_cfr, target_fps: batch.target_fps, output_filename: Some(output_filename) });
+            let result = video::convert(video::VideoConvertOptions {
+                input_path: input_path.clone(),
+                output_format: batch.output_format.clone(),
+                video_codec: batch.video_codec.clone(),
+                quality: batch.quality,
+                audio: batch.audio,
+                output_directory: batch.output_directory.clone(),
+                force_cfr: batch.force_cfr,
+                target_fps: batch.target_fps,
+                output_filename: Some(output_filename),
+            });
             match result {
-                Ok(output_path) => { results.push(output_path.clone()); let _ = app.emit("video-batch-progress", VideoBatchProgress { file_path: input_path, status: "completed".into(), output_path: Some(output_path), error: None, completed: index + 1, total }); }
-                Err(error) => { let _ = app.emit("video-batch-progress", VideoBatchProgress { file_path: input_path, status: "failed".into(), output_path: None, error: Some(error), completed: index + 1, total }); }
+                Ok(output_path) => {
+                    results.push(output_path.clone());
+                    let _ = app.emit(
+                        "video-batch-progress",
+                        VideoBatchProgress {
+                            file_path: input_path,
+                            status: "completed".into(),
+                            output_path: Some(output_path),
+                            error: None,
+                            completed: index + 1,
+                            total,
+                        },
+                    );
+                }
+                Err(error) => {
+                    let _ = app.emit(
+                        "video-batch-progress",
+                        VideoBatchProgress {
+                            file_path: input_path,
+                            status: "failed".into(),
+                            output_path: None,
+                            error: Some(error),
+                            completed: index + 1,
+                            total,
+                        },
+                    );
+                }
             }
         }
         Ok(results)
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -157,7 +239,7 @@ async fn read_image_as_data_url(path: String) -> Result<String, String> {
     let data = std::fs::read(&path).map_err(|e| e.to_string())?;
     use base64::Engine;
     let base64_str = base64::engine::general_purpose::STANDARD.encode(&data);
-    
+
     let ext = std::path::Path::new(&path)
         .extension()
         .and_then(|s| s.to_str())
@@ -272,7 +354,14 @@ async fn start_watch_automation(
     options: ConversionOptions,
     video_options: video::VideoConvertOptions,
 ) -> Result<(), String> {
-    start_folder_watcher(app, &state.watcher_state, watch_path, output_path, options, video_options)
+    start_folder_watcher(
+        app,
+        &state.watcher_state,
+        watch_path,
+        output_path,
+        options,
+        video_options,
+    )
 }
 
 #[tauri::command]
@@ -281,9 +370,9 @@ async fn stop_watch_automation(state: State<'_, AppState>) -> Result<(), String>
 }
 fn collect_images_recursively(path: &Path, result: &mut Vec<String>) {
     let valid_extensions = [
-        "jpg", "jpeg", "png", "webp", "svg", "bmp", "ico", "gif", "tiff", "tif",
-        "tga", "pnm", "qoi", "avif", "arw", "cr2", "crw", "dng", "nef", "orf",
-        "pef", "raf", "rw2", "sr2", "srf", "psd", "exr", "heic", "heif",
+        "jpg", "jpeg", "png", "webp", "svg", "bmp", "ico", "gif", "tiff", "tif", "tga", "pnm",
+        "qoi", "avif", "arw", "cr2", "crw", "dng", "nef", "orf", "pef", "raf", "rw2", "sr2", "srf",
+        "psd", "exr", "heic", "heif",
     ];
 
     if path.is_file() {
@@ -332,6 +421,8 @@ pub fn run() {
             calculate_quality_estimate,
             scan_dropped_paths,
             probe_video,
+            analyze_video_url,
+            download_video_url,
             export_video_to_gif,
             convert_video,
             convert_videos,

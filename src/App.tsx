@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { 
   Upload, 
   Trash2, 
@@ -23,7 +25,7 @@ import {
   ChevronDown,
   Layers,
   Activity
-  ,Sun, Moon, Camera
+  ,Sun, Moon, Camera, CloudDownload
 } from 'lucide-react';
 import { useFileStore } from './stores/fileStore';
 import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
@@ -34,7 +36,10 @@ import { UpdateChecker } from './components/updater/UpdateChecker';
 import { VideoToGifTab } from './components/video/VideoToGifTab';
 import { VideoConverterTab } from './components/video/VideoConverterTab';
 import { GrabStillsTab } from './components/video/GrabStillsTab';
+import { VideoDownloaderTab } from './components/video/VideoDownloaderTab';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
+
+const REPOSITORY_URL = 'https://github.com/duongtruongdp/ND-ImgConverter';
 
 interface ProgressPayload {
   filePath: string;
@@ -58,7 +63,10 @@ export default function App() {
   const { files, removeFile, clearFiles, addFiles, updateFileStatus, updateBatchFileInfo } = useFileStore();
   const settings = useSettingsStore();
   
-  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter' | 'grab-stills'>('converter');
+  const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter' | 'grab-stills' | 'video-downloader'>('converter');
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState('0.9.0');
+  const [aboutError, setAboutError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
@@ -70,6 +78,20 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
+
+  useEffect(() => {
+    void getVersion().then(setAppVersion);
+  }, []);
+
+  const openRepository = async () => {
+    try {
+      await openUrl(REPOSITORY_URL);
+      setAboutError(null);
+    } catch (error) {
+      console.error('Failed to open repository:', error);
+      setAboutError(`Unable to open the repository: ${String(error)}`);
+    }
+  };
 
   // 1. Scan the path and ingest files
   const processIncomingFiles = useCallback(async (rawPaths: string[]) => {
@@ -290,13 +312,13 @@ export default function App() {
         className="relative h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-30 shrink-0 select-none cursor-default"
       >
         {/* Left: Branding */}
-        <div className="flex items-center gap-2 pointer-events-none z-10">
+        <button type="button" onClick={() => setIsAboutOpen(true)} onMouseDown={(event) => event.stopPropagation()} className="flex items-center gap-2 z-10 cursor-pointer text-left">
           <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.8.2</span>
-        </div>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v{appVersion}</span>
+        </button>
 
         {/* Center: Absolute Fixed Position Tabs */}
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-20">
@@ -306,7 +328,7 @@ export default function App() {
               className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentTab === 'converter'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                    : 'app-nav-item text-zinc-400'
               }`}
             >
               <Layers className="w-3.5 h-3.5" /> Batch Convert
@@ -316,19 +338,20 @@ export default function App() {
               className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentTab === 'automation'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                    : 'app-nav-item text-zinc-400'
               }`}
             >
               <Activity className="w-3.5 h-3.5" /> Watch Folder
             </button>
             <button
               onClick={() => setCurrentTab('video')}
-              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}
+              className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}
             >
               <Activity className="w-3.5 h-3.5" /> Video to GIF
             </button>
-            <button onClick={() => setCurrentTab('video-converter')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-converter' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><ArrowRight className="w-3.5 h-3.5" /> Video Convert</button>
-            <button onClick={() => setCurrentTab('grab-stills')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'grab-stills' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'}`}><Camera className="w-3.5 h-3.5" /> Grab Stills</button>
+            <button onClick={() => setCurrentTab('video-converter')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-converter' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}><ArrowRight className="w-3.5 h-3.5" /> Video Convert</button>
+            <button onClick={() => setCurrentTab('grab-stills')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'grab-stills' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}><Camera className="w-3.5 h-3.5" /> Grab Stills</button>
+            <button onClick={() => setCurrentTab('video-downloader')} className={`text-[11px] font-medium px-3.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${currentTab === 'video-downloader' ? 'bg-blue-600 text-white shadow-sm' : 'app-nav-item text-zinc-400'}`}><CloudDownload className="w-3.5 h-3.5" /> Download</button>
           </div>
         </div>
 
@@ -352,7 +375,7 @@ export default function App() {
                     className={`text-[11px] font-medium px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                       settings.activePresetId === p.id
                         ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                        : 'app-nav-item text-zinc-400'
                     }`}
                   >
                     {p.name}
@@ -364,7 +387,7 @@ export default function App() {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={handleSelectFiles}
-                    className="text-[11px] font-medium px-3 py-1.5 rounded-lg bg-[#181c24] hover:bg-zinc-800 border border-zinc-700/60 text-zinc-200 flex items-center gap-1.5 transition cursor-pointer"
+                    className="app-primary-action text-[11px] font-medium px-3 py-1.5 rounded-lg border border-blue-500/60 flex items-center gap-1.5 transition cursor-pointer"
                   >
                     <Plus className="w-3 h-3" /> Add
                   </button>
@@ -450,7 +473,7 @@ export default function App() {
 
                       <div className="flex items-center gap-2.5">
                         {file.status === 'queued' && (
-                          <span className="text-[10px] text-zinc-400 bg-zinc-800/50 px-2 py-0.5 rounded-md border border-zinc-700/40">Ready</span>
+                          <span className="app-status-ready text-[10px] px-2 py-0.5 rounded-md border">Ready</span>
                         )}
                         {file.status === 'processing' && (
                           <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-500/20 flex items-center gap-1">
@@ -459,7 +482,7 @@ export default function App() {
                         )}
                         {file.status === 'completed' && (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                            <span className="app-status-done text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Done
                             </span>
                             <button
@@ -639,9 +662,24 @@ export default function App() {
       <div className={currentTab === 'video' ? 'contents' : 'hidden'}><VideoToGifTab active={currentTab === 'video'} /></div>
       <div className={currentTab === 'video-converter' ? 'contents' : 'hidden'}><VideoConverterTab active={currentTab === 'video-converter'} /></div>
       <div className={currentTab === 'grab-stills' ? 'contents' : 'hidden'}><GrabStillsTab active={currentTab === 'grab-stills'} /></div>
+      <div className={currentTab === 'video-downloader' ? 'contents' : 'hidden'}><VideoDownloaderTab active={currentTab === 'video-downloader'} /></div>
 
       {/* Auto-Update Notification Banner */}
       <UpdateChecker />
+
+      {isAboutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={() => setIsAboutOpen(false)}>
+          <section className="theme-surface-elevated w-full max-w-sm rounded-2xl border p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="about-title">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center"><Sparkles className="w-5 h-5 text-white" /></div><div><h2 id="about-title" className="theme-text-primary text-sm font-semibold">ND Image Converter</h2><p className="theme-text-secondary text-xs mt-1">Version v{appVersion}</p></div></div>
+              <button type="button" onClick={() => setIsAboutOpen(false)} className="theme-text-muted hover:theme-text-primary p-1" aria-label="Close About dialog">×</button>
+            </div>
+            <div className="theme-text-secondary mt-5 space-y-2 text-xs"><p>Offline image and video conversion for creators and developers.</p><p>Developed by Trương Nguyễn Nhật Dương</p><p>License: MIT</p></div>
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => void openRepository()} className="app-primary-action rounded-lg px-3 py-2 text-xs">Repository</button><button type="button" onClick={() => setIsAboutOpen(false)} className="app-secondary-action rounded-lg px-3 py-2 text-xs theme-text-secondary">Close</button></div>
+            {aboutError && <p className="theme-error mt-3 text-xs break-words">{aboutError}</p>}
+          </section>
+        </div>
+      )}
 
       {/* Comparison Modal */}
       {selectedComparisonItem && (

@@ -2,7 +2,7 @@
 
 **Blazing-fast, privacy-first, offline batch image converter & optimizer for desktop.**
 
-![Version](https://img.shields.io/badge/version-0.8.2-blue.svg)
+![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Built With](https://img.shields.io/badge/built%20with-Tauri%202%20%7C%20Rust%20%7C%20React-orange.svg)
@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.8.2)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.9.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
   </a>
 </p>
 
@@ -87,6 +87,8 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 - 🔄 **Persistent tab sessions:** Keep queued files, video positions, trim points, and Watch Folder configuration while switching tabs.
 - 📁 **Native output-folder selection:** Choose an output directory through the operating system picker; defaults to the input folder.
 - 🔔 **GitHub release update checker:** Detect newer versions and open the official release download page.
+- 🌐 **Video Downloader:** Analyze and download authorized public video URLs with selectable formats, optional browser-cookie authentication, progress reporting, and a bundled pinned `yt-dlp` engine.
+- 🛡 **YouTube stream support:** Release builds include the pinned `bgutil-ytdlp-pot-provider-rs` plugin/provider for YouTube PO Token requests when supported by the source.
 - 🖥 **Cross-platform desktop app:** Built with Tauri for macOS, Windows, and Linux with a lightweight native shell.
 - 🌙 **Dark and Light UI:** Consistent semantic controls, previews, progress feedback, and conversion status reporting.
 
@@ -100,6 +102,8 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 * **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 * **State Management:** [Zustand](https://github.com/pmndrs/zustand)
 * **Icons:** [Lucide React](https://lucide.dev/)
+
+The optional YouTube PO Token integration packages the provider's GPLv3 plugin and standalone Rust binary in release builds. See the provider's [license and source](https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs) for attribution and redistribution terms.
 
 ---
 
