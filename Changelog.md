@@ -2,6 +2,17 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.8.4] - 2026-08-29
+
+### Fixed
+- Fixed Video Converter IPC payload handling for single and multi-video conversions.
+- Improved long Video to GIF trimming with interval-first FFmpeg seeking and collision-safe output names.
+- Corrected GIF quality mapping so higher quality produces a larger color palette.
+- Added a clear Grab Stills preview-unavailable state while preserving FFmpeg still extraction.
+
+### Added
+- Added a compact About dialog with runtime version and repository link.
+
 ## [v0.8.3] - 2026-08-28
 
 ### Fixed

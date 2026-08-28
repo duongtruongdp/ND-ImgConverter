@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { 
   Upload, 
   Trash2, 
@@ -36,6 +38,8 @@ import { VideoConverterTab } from './components/video/VideoConverterTab';
 import { GrabStillsTab } from './components/video/GrabStillsTab';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
+const REPOSITORY_URL = 'https://github.com/duongtruongdp/ND-ImgConverter';
+
 interface ProgressPayload {
   filePath: string;
   outputPath?: string;
@@ -59,6 +63,9 @@ export default function App() {
   const settings = useSettingsStore();
   
   const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter' | 'grab-stills'>('converter');
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState('0.8.4');
+  const [aboutError, setAboutError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
@@ -70,6 +77,20 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
   }, [settings.theme]);
+
+  useEffect(() => {
+    void getVersion().then(setAppVersion);
+  }, []);
+
+  const openRepository = async () => {
+    try {
+      await openUrl(REPOSITORY_URL);
+      setAboutError(null);
+    } catch (error) {
+      console.error('Failed to open repository:', error);
+      setAboutError(`Unable to open the repository: ${String(error)}`);
+    }
+  };
 
   // 1. Scan the path and ingest files
   const processIncomingFiles = useCallback(async (rawPaths: string[]) => {
@@ -290,13 +311,13 @@ export default function App() {
         className="relative h-12 pl-20 pr-5 border-b border-zinc-800/60 flex items-center justify-between bg-[#101216]/80 backdrop-blur-xl z-30 shrink-0 select-none cursor-default"
       >
         {/* Left: Branding */}
-        <div className="flex items-center gap-2 pointer-events-none z-10">
+        <button type="button" onClick={() => setIsAboutOpen(true)} onMouseDown={(event) => event.stopPropagation()} className="flex items-center gap-2 z-10 cursor-pointer text-left">
           <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-xs font-semibold tracking-wide text-zinc-100">ND Image Converter</span>
-          <span className="text-[10px] text-zinc-500 font-mono ml-1">v0.8.3</span>
-        </div>
+          <span className="text-[10px] text-zinc-500 font-mono ml-1">v{appVersion}</span>
+        </button>
 
         {/* Center: Absolute Fixed Position Tabs */}
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-20">
@@ -642,6 +663,20 @@ export default function App() {
 
       {/* Auto-Update Notification Banner */}
       <UpdateChecker />
+
+      {isAboutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={() => setIsAboutOpen(false)}>
+          <section className="theme-surface-elevated w-full max-w-sm rounded-2xl border p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="about-title">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center"><Sparkles className="w-5 h-5 text-white" /></div><div><h2 id="about-title" className="theme-text-primary text-sm font-semibold">ND Image Converter</h2><p className="theme-text-secondary text-xs mt-1">Version v{appVersion}</p></div></div>
+              <button type="button" onClick={() => setIsAboutOpen(false)} className="theme-text-muted hover:theme-text-primary p-1" aria-label="Close About dialog">×</button>
+            </div>
+            <div className="theme-text-secondary mt-5 space-y-2 text-xs"><p>Offline image and video conversion for creators and developers.</p><p>Developed by Trương Nguyễn Nhật Dương</p><p>License: MIT</p></div>
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => void openRepository()} className="app-primary-action rounded-lg px-3 py-2 text-xs">Repository</button><button type="button" onClick={() => setIsAboutOpen(false)} className="app-secondary-action rounded-lg px-3 py-2 text-xs theme-text-secondary">Close</button></div>
+            {aboutError && <p className="theme-error mt-3 text-xs break-words">{aboutError}</p>}
+          </section>
+        </div>
+      )}
 
       {/* Comparison Modal */}
       {selectedComparisonItem && (

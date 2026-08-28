@@ -55,12 +55,26 @@ pub fn extract_still(options: StillOptions) -> Result<String, String> {
   if !status.success() { return Err("FFmpeg failed to extract the frame".into()); }
   Ok(output.to_string_lossy().into())
 }
+fn gif_palette_colors(quality: u8) -> u32 {
+  32 + (quality.clamp(1, 100) as u32 * 224 / 100)
+}
+
+fn unique_output_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {
+  let mut index = 0;
+  loop {
+    let filename = if index == 0 { format!("{stem}.{extension}") } else { format!("{stem}-{index}.{extension}") };
+    let candidate = dir.join(filename);
+    if !candidate.exists() { return candidate; }
+    index += 1;
+  }
+}
+
 pub fn export(options: GifOptions) -> Result<String, String> {
   if options.in_point < 0.0 || options.out_point <= options.in_point || options.width == 0 || options.fps == 0 { return Err("Invalid trim or GIF settings".into()); }
   let input=Path::new(&options.input_path); if !input.exists(){return Err("Input video not found".into());}
   let dir=options.output_directory.map(PathBuf::from).unwrap_or_else(||input.parent().unwrap_or(Path::new(".")).to_path_buf()); std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
-  let stem=input.file_stem().and_then(|v|v.to_str()).unwrap_or("output"); let output=dir.join(format!("{stem}.gif")); let duration=options.out_point-options.in_point;
-  let vf=format!("fps={},scale={}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors={}[p];[s1][p]paletteuse=dither=sierra2_4a", options.fps, options.width, 32 + (options.quality as u32 * 224 / 100));
+  let stem=input.file_stem().and_then(|v|v.to_str()).unwrap_or("output"); let output=unique_output_path(&dir, stem, "gif"); let duration=options.out_point-options.in_point;
+  let vf=format!("fps={},scale={}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors={}[p];[s1][p]paletteuse=dither=sierra2_4a", options.fps, options.width, gif_palette_colors(options.quality));
   let status=Command::new(tool("ffmpeg")).args(["-y","-ss",&options.in_point.to_string(),"-i",&options.input_path,"-t",&duration.to_string(),"-vf",&vf,"-loop","0",output.to_str().unwrap_or("output.gif")]).status().map_err(|e|format!("ffmpeg unavailable: {e}"))?;
   if !status.success(){return Err("FFmpeg failed to export GIF".into());} Ok(output.to_string_lossy().into())
 }
@@ -82,4 +96,16 @@ pub fn convert(options: VideoConvertOptions) -> Result<String, String> {
   args.push(output.to_string_lossy().into());
   let status = Command::new(tool("ffmpeg")).args(args).status().map_err(|e| format!("ffmpeg unavailable: {e}"))?;
   if !status.success() { return Err("FFmpeg failed to convert the video".into()); } Ok(output.to_string_lossy().into())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::gif_palette_colors;
+
+  #[test]
+  fn gif_quality_maps_to_more_palette_colors_at_higher_quality() {
+    assert_eq!(gif_palette_colors(1), 34);
+    assert_eq!(gif_palette_colors(50), 144);
+    assert_eq!(gif_palette_colors(100), 256);
+  }
 }

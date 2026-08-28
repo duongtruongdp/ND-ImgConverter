@@ -9,6 +9,12 @@
     "core:window:allow-start-dragging",
     "dialog:default",
     "fs:default",
-    "opener:allow-open-url"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://github.com/duongtruongdp/ND-ImgConverter" },
+        { "url": "https://github.com/duongtruongdp/ND-ImgConverter/releases/*" }
+      ]
+    }
   ]
 }
