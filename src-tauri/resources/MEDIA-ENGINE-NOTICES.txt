@@ -1,0 +1,20 @@
+ND Image Converter media engine notice index
+============================================
+
+yt-dlp 2026.08.27.231323
+Source: https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/tag/2026.08.27.231323
+The upstream release identifies the executable as Unlicense software and
+includes ISC/MIT and other third-party components. Preserve the upstream
+third-party license bundle with every published binary.
+
+bgutil-ytdlp-pot-provider-rs v0.8.1
+Source: https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/tag/v0.8.1
+GPL-3.0-or-later. Preserve the corresponding source/build information and
+license notices.
+
+gallery-dl has a separate GPL-2.0-only notice in GALLERY-DL-NOTICES.txt.
+FFmpeg/FFprobe have a separate build notice in FFMPEG-NOTICES.txt.
+
+This index is an engineering attribution record, not legal advice. See
+docs/runtime/third-party-notices.md for the release inventory and open legal
+review items.

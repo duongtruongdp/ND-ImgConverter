@@ -1,0 +1,15 @@
+ND Image Converter — bundled FFmpeg notice
+
+This build includes FFmpeg 9.0.2 and FFprobe 9.0.2 from:
+https://ffmpeg.martin-riedl.de/
+
+Source/build information:
+https://ffmpeg.martin-riedl.de/
+https://git.martin-riedl.de/ffmpeg/build-script
+https://ffmpeg.org/download.html
+
+The selected build reports GPL-enabled configuration and includes GPL codec
+libraries. The applicable FFmpeg and dependency license texts, source offer and
+copyright notices must be distributed with the final release. This file is an
+attribution record, not a legal conclusion; public redistribution requires a
+license review for the exact build and enabled dependencies.

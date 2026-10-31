@@ -1,0 +1,15 @@
+gallery-dl runtime notice
+=========================
+
+gallery-dl 1.32.19 is licensed under GNU GPL version 2 (GPL-2.0-only).
+Upstream source: https://github.com/mikf/gallery-dl
+Official release information: https://codeberg.org/mikf/gallery-dl/releases/tag/v1.32.19
+
+This notice applies only when a gallery-dl executable is included in a build.
+The macOS executable is produced by the controlled PyInstaller workflow described
+in docs/runtime/gallery-runtime-build.md. The build records the source commit,
+source archive hash, Python version, PyInstaller version and artifact hash.
+
+This file is a provenance and attribution notice, not a legal conclusion about
+distribution obligations. Preserve the corresponding source and dependency
+notices for every published artifact.
