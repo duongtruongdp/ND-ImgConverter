@@ -33,8 +33,19 @@ const sha256 = (path) => {
 
 const versionArgs = (name) => ['ytDlp', 'bgutilPot', 'galleryDl'].includes(name) ? ['--version'] : ['-version'];
 
+const archiveTool = () => {
+  const unzip = spawnSync('unzip', ['-v'], { stdio: 'ignore' });
+  if (unzip.status === 0) return 'unzip';
+  const tar = spawnSync('tar', ['--version'], { stdio: 'ignore' });
+  if (tar.status === 0) return 'tar';
+  throw new Error('Could not find an archive tool. Install unzip or tar on the release runner.');
+};
+
 const validateArchiveLayout = (archivePath, executablePath) => {
-  const listing = spawnSync('unzip', ['-Z1', archivePath], { encoding: 'utf8' });
+  const tool = archiveTool();
+  const listing = tool === 'unzip'
+    ? spawnSync('unzip', ['-Z1', archivePath], { encoding: 'utf8' })
+    : spawnSync('tar', ['-tf', archivePath], { encoding: 'utf8' });
   if (listing.status !== 0) throw new Error(`Could not inspect ${archivePath} as a ZIP archive.`);
   const entries = listing.stdout.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
   for (const entry of entries) {
@@ -45,7 +56,12 @@ const validateArchiveLayout = (archivePath, executablePath) => {
   if (!entries.includes(executablePath)) {
     throw new Error(`${archivePath} does not contain the approved executable path ${executablePath}.`);
   }
+  return tool;
 };
+
+const extractArchiveFile = (tool, archivePath, executablePath, outputFd) => tool === 'unzip'
+  ? spawnSync('unzip', ['-p', archivePath, executablePath], { stdio: ['ignore', outputFd, 'pipe'] })
+  : spawnSync('tar', ['-xOf', archivePath, executablePath], { stdio: ['ignore', outputFd, 'pipe'] });
 
 const download = async (name, entry) => {
   if (!entry?.url || !entry.sha256 || !entry.binarySha256 || !entry.version || !entry.license) {
@@ -79,9 +95,9 @@ const download = async (name, entry) => {
     rmSync(archivePath, { force: true });
     throw new Error(`${name} archive SHA-256 mismatch.`);
   }
-  validateArchiveLayout(archivePath, entry.executablePath);
+  const tool = validateArchiveLayout(archivePath, entry.executablePath);
   const extractedFd = openSync(tempPath, 'wx');
-  const extraction = spawnSync('unzip', ['-p', archivePath, entry.executablePath], { stdio: ['ignore', extractedFd, 'pipe'] });
+  const extraction = extractArchiveFile(tool, archivePath, entry.executablePath, extractedFd);
   closeSync(extractedFd);
   if (extraction.status !== 0) throw new Error(`${name} executable extraction failed.`);
   const binaryHash = sha256(tempPath);
