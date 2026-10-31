@@ -74,7 +74,9 @@ const download = async (name, entry) => {
   if (entry.archiveFormat !== 'zip' || !entry.executablePath) {
     throw new Error(`${name} must declare a ZIP archive and executablePath.`);
   }
-  const response = await fetch(entry.url, { redirect: 'error' });
+  // GitHub release assets redirect to a CDN. The pinned archive and extracted
+  // binary hashes below remain the trust gate after following that redirect.
+  const response = await fetch(entry.url, { redirect: 'follow' });
   if (!response.ok || !response.body) throw new Error(`${name} download failed with HTTP ${response.status}.`);
   const archivePath = join(root, `.${name}.archive`);
   const finalPath = join(root, directName(name));
@@ -122,7 +124,9 @@ const downloadRawBinary = async (name, outputName, entry) => {
   if (!entry.url.startsWith('https://') || !/^[a-f0-9]{64}$/i.test(entry.sha256) || !/^[a-f0-9]{64}$/i.test(entry.binarySha256)) {
     throw new Error(`${name} source or SHA-256 metadata is invalid.`);
   }
-  const response = await fetch(entry.url, { redirect: 'error' });
+  // GitHub release assets redirect to a CDN; verify the downloaded bytes
+  // against the approved archive/binary hash before installing them.
+  const response = await fetch(entry.url, { redirect: 'follow' });
   if (!response.ok || !response.body) throw new Error(`${name} download failed with HTTP ${response.status}.`);
   const tempPath = join(root, `.${outputName}.download`);
   const finalPath = join(root, outputName);
