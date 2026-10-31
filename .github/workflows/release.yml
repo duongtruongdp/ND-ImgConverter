@@ -300,7 +300,7 @@ jobs:
             cp "$bundle_root/bundle/nsis/"*.exe "$output/"
           fi
           printf 'artifact_label=%s\ntarget=%s\ncommit=%s\n' "$ARTIFACT_LABEL" "${{ matrix.target }}" "$GITHUB_SHA" > "$output/BUILD-METADATA.txt"
-          shasum -a 256 "$output"/* > "$output/SHA256SUMS.txt"
+          node scripts/write-sha256-sums.mjs "$output"
 
       - name: Upload internal CI artifacts
         uses: actions/upload-artifact@v4
