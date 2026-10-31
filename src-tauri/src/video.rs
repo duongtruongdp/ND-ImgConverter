@@ -246,7 +246,7 @@ where
         "fps={},scale={}:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors={}[p];[s1][p]paletteuse=dither=sierra2_4a",
         options.fps,
         options.width,
-        32 + (options.quality as u32 * 224 / 100)
+        gif_palette_colors(options.quality)
     );
     let ffmpeg = tool("ffmpeg")?;
     let mut child = Command::new(ffmpeg)
@@ -326,6 +326,10 @@ fn parse_ffmpeg_progress(line: &str, duration: f64) -> Option<f64> {
     Some((seconds / duration.max(0.001)).clamp(0.0, 1.0))
 }
 
+fn gif_palette_colors(quality: u8) -> u32 {
+    32 + (quality.clamp(1, 100) as u32 * 224 / 100)
+}
+
 fn safe_gif_filename(filename: &str) -> Result<String, String> {
     if filename.is_empty()
         || filename == "."
@@ -386,7 +390,8 @@ fn temporary_path(output: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::{
-        export, export_with_progress, next_available_path, safe_gif_filename, tool, GifOptions,
+        export, export_with_progress, gif_palette_colors, next_available_path, safe_gif_filename,
+        tool, GifOptions,
     };
     use std::path::Path;
     use std::process::Command;
@@ -397,6 +402,14 @@ mod tests {
     fn accepts_simple_gif_names_and_adds_extension() {
         assert_eq!(safe_gif_filename("clip-001").unwrap(), "clip-001.gif");
         assert_eq!(safe_gif_filename("clip.GIF").unwrap(), "clip.GIF");
+    }
+
+    #[test]
+    fn gif_quality_maps_to_a_bounded_palette() {
+        assert_eq!(gif_palette_colors(0), 34);
+        assert_eq!(gif_palette_colors(50), 144);
+        assert_eq!(gif_palette_colors(100), 256);
+        assert_eq!(gif_palette_colors(255), 256);
     }
 
     #[test]

@@ -15,6 +15,17 @@ All notable changes and feature releases for **ND Image Converter** are document
 ### Safety
 - Downloader requests are limited to one URL at a time, disable playlist expansion, avoid overwriting existing files, and do not implement DRM or login bypass. Browser cookies are read only when explicitly selected by the user and are never stored or uploaded.
 
+## [v0.8.4] - 2026-08-29
+
+### Fixed
+- Fixed Video Converter IPC payload handling for single and multi-video conversions.
+- Fixed output file naming and frame extraction behavior for video workflows.
+
+### UI
+- Improved hover text and icon contrast across interactive controls.
+- Restored the Batch Convert `+ Add` button to the primary action appearance.
+- Updated `Ready` status badges to red while keeping `Done` badges green.
+
 ## [v0.8.2] - 2026-08-28
 
 ### Added
