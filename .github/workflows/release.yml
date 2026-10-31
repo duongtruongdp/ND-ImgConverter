@@ -20,10 +20,10 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin --bundles app"
+            args: "--target aarch64-apple-darwin --bundles app,dmg"
             target: "aarch64-apple-darwin"
           - platform: "macos-13"
-            args: "--target x86_64-apple-darwin --bundles app"
+            args: "--target x86_64-apple-darwin --bundles app,dmg"
             target: "x86_64-apple-darwin"
           - platform: "windows-latest"
             args: "--target x86_64-pc-windows-msvc --bundles nsis"
@@ -227,6 +227,7 @@ jobs:
         shell: bash
         env:
           ND_RUNTIME_TARGET: ${{ matrix.target }}
+          ND_DMG_FORCE: '1'
         run: npm run build:macos-dmg
 
       - name: Verify packaged runtime bundle
