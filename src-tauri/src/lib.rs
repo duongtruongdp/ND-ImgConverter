@@ -1,7 +1,9 @@
 mod download;
 mod engine;
+mod engine_update;
 mod errors;
 mod models;
+mod runtime;
 mod video;
 mod watermark;
 
@@ -20,7 +22,65 @@ use crate::models::conversion::{ConversionOptions, ImageMetadata, OutputFormat, 
 
 pub struct AppState {
     pub is_cancelled: Arc<AtomicBool>,
+    pub is_gif_cancelled: Arc<AtomicBool>,
+    pub is_engine_update_cancelled: Arc<AtomicBool>,
     pub watcher_state: FolderWatcherState,
+}
+
+#[tauri::command]
+fn get_runtime_diagnostics() -> Vec<runtime::RuntimeDiagnostic> {
+    runtime::diagnostics()
+}
+
+#[tauri::command]
+fn refresh_runtime_diagnostics() -> Vec<runtime::RuntimeDiagnostic> {
+    runtime::invalidate_diagnostics_cache();
+    runtime::diagnostics()
+}
+
+#[tauri::command]
+fn get_engine_inventory() -> Vec<engine_update::EngineStatus> {
+    engine_update::inventory()
+}
+
+#[tauri::command]
+fn refresh_engine_inventory() -> Vec<engine_update::EngineStatus> {
+    runtime::invalidate_diagnostics_cache();
+    engine_update::inventory()
+}
+
+#[tauri::command]
+fn check_engine_updates() -> engine_update::UpdateCheckResult {
+    engine_update::check_updates()
+}
+
+#[tauri::command]
+fn rollback_engine(engine: String) -> Result<engine_update::EngineStatus, String> {
+    engine_update::rollback(&engine)
+}
+
+#[tauri::command]
+fn install_engine_update(request: engine_update::InstallRequest) -> Result<engine_update::EngineStatus, String> {
+    engine_update::install_from_staging(request)
+}
+
+#[tauri::command]
+async fn download_engine_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    asset: engine_update::EngineAsset,
+    allowed_hosts: Vec<String>,
+) -> Result<String, String> {
+    state.is_engine_update_cancelled.store(false, Ordering::SeqCst);
+    let cancel = state.is_engine_update_cancelled.clone();
+    engine_update::download_asset(&asset, &allowed_hosts, &cancel, |completed, total| {
+        let _ = app.emit("engine-update-progress", serde_json::json!({ "completed": completed, "total": total }));
+    }).await
+}
+
+#[tauri::command]
+fn cancel_engine_update(state: State<'_, AppState>) {
+    state.is_engine_update_cancelled.store(true, Ordering::SeqCst);
 }
 
 #[derive(serde::Serialize)]
@@ -41,19 +101,53 @@ async fn probe_video(path: String) -> Result<video::VideoInfo, String> {
 async fn analyze_video_url(
     request: download::AnalyzeRequest,
 ) -> Result<download::DownloadMetadata, String> {
+    download::reset_for_analysis();
     tauri::async_runtime::spawn_blocking(move || download::analyze(&request))
         .await
         .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-async fn download_video_url(
+async fn download_gallery_url(
     app: AppHandle,
-    request: download::DownloadRequest,
+    job_id: String,
+    request: download::GalleryDownloadRequest,
 ) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || download::download(app, request))
+    download::begin(&job_id);
+    let result = tauri::async_runtime::spawn_blocking(move || download::download_gallery(app, request))
+        .await
+        .map_err(|e| e.to_string());
+    download::finish(&job_id);
+    result?
+}
+
+#[tauri::command]
+async fn analyze_gallery_url(
+    request: download::GalleryAnalyzeRequest,
+) -> Result<download::GalleryMetadata, String> {
+    download::reset_for_analysis();
+    tauri::async_runtime::spawn_blocking(move || download::analyze_gallery(&request))
         .await
         .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn cancel_media_download(job_id: String) {
+    download::cancel(&job_id);
+}
+
+#[tauri::command]
+async fn download_video_url(
+    app: AppHandle,
+    job_id: String,
+    request: download::DownloadRequest,
+) -> Result<String, String> {
+    download::begin(&job_id);
+    let result = tauri::async_runtime::spawn_blocking(move || download::download(app, request))
+        .await
+        .map_err(|e| e.to_string());
+    download::finish(&job_id);
+    result?
 }
 
 #[tauri::command]
@@ -64,10 +158,25 @@ async fn grab_video_still(options: video::StillOptions) -> Result<String, String
 }
 
 #[tauri::command]
-async fn export_video_to_gif(options: video::GifOptions) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || video::export(options))
-        .await
-        .map_err(|e| e.to_string())?
+async fn export_video_to_gif(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    options: video::GifOptions,
+) -> Result<String, String> {
+    state.is_gif_cancelled.store(false, Ordering::SeqCst);
+    let cancel = state.is_gif_cancelled.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        video::export_with_progress(options, cancel, |progress| {
+            let _ = app.emit("video-gif-progress", progress);
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn cancel_video_gif_render(state: State<'_, AppState>) {
+    state.is_gif_cancelled.store(true, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -406,8 +515,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            runtime::initialize(&app.handle());
+            let _ = engine_update::cleanup_staging();
+            Ok(())
+        })
         .manage(AppState {
             is_cancelled: Arc::new(AtomicBool::new(false)),
+            is_gif_cancelled: Arc::new(AtomicBool::new(false)),
+            is_engine_update_cancelled: Arc::new(AtomicBool::new(false)),
             watcher_state: FolderWatcherState::new(),
         })
         .invoke_handler(tauri::generate_handler![
@@ -420,10 +536,23 @@ pub fn run() {
             stop_watch_automation,
             calculate_quality_estimate,
             scan_dropped_paths,
+            get_runtime_diagnostics,
+            refresh_runtime_diagnostics,
+            get_engine_inventory,
+            refresh_engine_inventory,
+            check_engine_updates,
+            rollback_engine,
+            install_engine_update,
+            download_engine_update,
+            cancel_engine_update,
             probe_video,
             analyze_video_url,
             download_video_url,
+            download_gallery_url,
+            analyze_gallery_url,
+            cancel_media_download,
             export_video_to_gif,
+            cancel_video_gif_render,
             convert_video,
             convert_videos,
             grab_video_still

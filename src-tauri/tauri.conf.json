@@ -27,14 +27,30 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/**", "$TEMP/**"]
+        "scope": [
+          "$HOME/**",
+          "$TEMP/**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": ["binaries/ffmpeg", "binaries/ffprobe", "binaries/lib"],
+    "resources": [
+      "binaries/ffmpeg",
+      "binaries/ffprobe",
+      "binaries/yt-dlp",
+      "binaries/gallery-dl",
+      "binaries/bgutil-pot",
+      "binaries/yt-dlp-plugins",
+      "binaries/lib",
+      "resources/FFMPEG-NOTICES.txt",
+      "resources/GALLERY-DL-NOTICES.txt",
+      "resources/MEDIA-ENGINE-NOTICES.txt",
+      "binaries/gallery-dl-build.json",
+      "binaries/runtime-manifest.json"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -44,7 +60,7 @@
     ],
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "12.3",
       "dmg": {
         "background": "icons/dmg-background.png",
         "windowSize": {

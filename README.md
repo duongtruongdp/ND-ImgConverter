@@ -33,13 +33,10 @@ No terminal or programming tools required. Simply download the pre-built install
 
 ### First-Time Launch Instructions
 
-* **macOS (Gatekeeper bypass):**
+* **macOS (first launch):**
   * Drag `ND Image Converter` into your `/Applications` folder.
-  * If macOS says *"The application can't be opened"*, open **Terminal** and run:
-    ```bash
-    sudo xattr -cr "/Applications/ND Image Converter.app"
-    ```
-  * *Alternative:* Right-click the app in Finder $\rightarrow$ select **Open** $\rightarrow$ click **Open Anyway**.
+  * For an unsigned test build, right-click the app in Finder and select **Open**, or use **System Settings → Privacy & Security → Open Anyway** after verifying the release checksum.
+  * Production signed and notarized releases should not require a Gatekeeper override.
 * **Windows (SmartScreen warning):**
   * When *"Windows protected your PC"* appears, click **More info** $\rightarrow$ **Run anyway** (this appears only because open-source projects lack paid $400/yr certificate signatures).
 
@@ -149,16 +146,8 @@ The output installation files will be generated in:
 
 ### Q&A
 
-**Question**: Why does macOS say "The application can't be opened"?
-macOS Gatekeeper may block apps downloaded from the internet. Try these fixes:
-
-- Method 1 (Recommended): Open Terminal and run
-```
-xattr -cr /Applications/ND Image Converter.app
-```
-- Method 2: Right-click the app -> select "Open" -> click "Open" in the dialog.
-
-- Method 3: Go to System Settings -> Privacy & Security -> scroll down and click "Open Anyway".
+**Question**: Why does macOS show a Gatekeeper warning?
+Unsigned test builds may be blocked when first downloaded. Verify the release checksum, then right-click the app in Finder and choose **Open**, or go to **System Settings -> Privacy & Security -> Open Anyway**. Production signed and notarized releases should not require an override.
 
 **Question**: Why does Windows show "Windows protected your PC"?
 This SmartScreen warning appears because ND Image Converter isn't code-signed yet. Code signing certificates cost $400+/year, which isn't feasible for a free project at this stage.

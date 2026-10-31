@@ -3,33 +3,31 @@ name: "Release App"
 on:
   push:
     branches:
-      - dev
-    tags:
-      - "v*"
+      - main
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Release tag to build"
+      artifact_label:
+        description: "Internal artifact label"
         required: true
-        default: "v0.9.0"
+        default: "v0.9.0-rc"
 
 jobs:
   release:
     permissions:
-      contents: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin --bundles app"
             target: "aarch64-apple-darwin"
+          - platform: "macos-13"
+            args: "--target x86_64-apple-darwin --bundles app"
+            target: "x86_64-apple-darwin"
           - platform: "windows-latest"
-            args: ""
+            args: "--target x86_64-pc-windows-msvc --bundles nsis"
             target: "x86_64-pc-windows-msvc"
-          - platform: "ubuntu-22.04"
-            args: ""
-            target: "x86_64-unknown-linux-gnu"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -46,72 +44,124 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install FFmpeg (macOS)
+      - name: Setup pinned Python for macOS gallery build
         if: startsWith(matrix.platform, 'macos')
-        run: brew install ffmpeg
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.15'
 
-      - name: Install FFmpeg (Windows)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: choco install ffmpeg -y --no-progress
-
-      - name: Install dependencies and FFmpeg (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf ffmpeg
-
-      - name: Bundle FFmpeg binaries
+      - name: Prepare approved runtime binaries
         shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: node scripts/prepare-release-runtime.mjs
+
+      - name: Verify all runtime source approvals
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: node scripts/verify-release-sources.mjs
+
+      - name: Build pinned gallery-dl runtime on macOS
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
         run: |
-          mkdir -p src-tauri/binaries/lib
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp "$(cygpath "$(where.exe ffmpeg | head -1)")" src-tauri/binaries/ffmpeg
-            cp "$(cygpath "$(where.exe ffprobe | head -1)")" src-tauri/binaries/ffprobe
-          else
-            cp "$(command -v ffmpeg)" src-tauri/binaries/ffmpeg
-            cp "$(command -v ffprobe)" src-tauri/binaries/ffprobe
-            chmod +x src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe
-          fi
+          set -euo pipefail
+          GALLERY_DIR="$RUNNER_TEMP/nd-gallery-dl-${{ matrix.target }}"
+          mkdir -p "$GALLERY_DIR"
+          GALLERY_URL="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sourceArchiveUrl")"
+          GALLERY_SHA="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sourceArchiveSha256")"
+          GALLERY_COMMIT="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sourceCommit")"
+          ARCHIVE="$GALLERY_DIR/gallery_dl-1.32.19.tar.gz"
+          curl -L --fail --retry 3 -o "$ARCHIVE" "$GALLERY_URL"
+          echo "$GALLERY_SHA  $ARCHIVE" | shasum -a 256 -c -
+          tar -xzf "$ARCHIVE" -C "$GALLERY_DIR"
+          python3 -m venv "$GALLERY_DIR/venv"
+          "$GALLERY_DIR/venv/bin/python" -m pip install --require-hashes -r scripts/gallery-runtime/requirements-macos.lock
+          ND_RUNTIME_TARGET="${{ matrix.target }}" \
+          ND_GALLERY_DL_SOURCE_DIR="$GALLERY_DIR/gallery_dl-1.32.19" \
+          ND_GALLERY_DL_SOURCE_COMMIT="$GALLERY_COMMIT" \
+          ND_GALLERY_DL_SOURCE_ARCHIVE_SHA256="$GALLERY_SHA" \
+          ND_GALLERY_DL_SOURCE_ARCHIVE_URL="$GALLERY_URL" \
+          ND_GALLERY_DEPENDENCY_LOCK="scripts/gallery-runtime/requirements-macos.lock" \
+          ND_PYTHON="$GALLERY_DIR/venv/bin/python" \
+          ND_GALLERY_BUILD_ROOT="$GALLERY_DIR/pyinstaller-build" \
+          ND_RUNTIME_OUTPUT="src-tauri/binaries" \
+          node scripts/build-gallery-runtime.mjs
 
       - name: Bundle yt-dlp downloader
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
-          YTDLP_VERSION="$(node -p "require('./scripts/downloader-versions.json').ytDlpVersion")"
+          YTDLP_VERSION="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].ytDlp.version")"
+          YTDLP_URL="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].ytDlp.url")"
+          YTDLP_SHA="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].ytDlp.sha256")"
           if [ "${{ runner.os }}" = "Windows" ]; then
-            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp.exe "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${YTDLP_VERSION}/yt-dlp.exe"
-            cp src-tauri/binaries/yt-dlp.exe src-tauri/binaries/yt-dlp
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp.exe "$YTDLP_URL"
           elif [ "${{ runner.os }}" = "macOS" ]; then
-            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${YTDLP_VERSION}/yt-dlp_macos"
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp "$YTDLP_URL"
             chmod +x src-tauri/binaries/yt-dlp
           else
-            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/download/${YTDLP_VERSION}/yt-dlp_linux"
+            curl -L --fail --retry 3 -o src-tauri/binaries/yt-dlp "$YTDLP_URL"
             chmod +x src-tauri/binaries/yt-dlp
           fi
-          actual="$(src-tauri/binaries/yt-dlp --version)"
-          test "$actual" = "$YTDLP_VERSION"
+          YTDLP_BIN="src-tauri/binaries/yt-dlp"
+          if [ "${{ runner.os }}" = "Windows" ]; then YTDLP_BIN="src-tauri/binaries/yt-dlp.exe"; fi
+          node scripts/verify-runtime-file.mjs "$YTDLP_BIN" "$YTDLP_SHA" "$YTDLP_VERSION" --version
 
       - name: Bundle pinned YouTube PO Token provider
         shell: bash
         run: |
           set -euo pipefail
-          BGUTIL_VERSION="$(node -p "require('./scripts/downloader-versions.json').bgutilVersion")"
+          BGUTIL_VERSION="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPot.version")"
+          BGUTIL_URL="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPot.url")"
+          BGUTIL_SHA="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPot.sha256")"
+          BGUTIL_PLUGIN_URL="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPotPlugin.url")"
+          BGUTIL_PLUGIN_SHA="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPotPlugin.sha256")"
           mkdir -p src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
-          curl -L --fail --retry 3 -o /tmp/bgutil-ytdlp-pot-provider.zip "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-ytdlp-pot-provider-rs.zip"
+          curl -L --fail --retry 3 -o /tmp/bgutil-ytdlp-pot-provider.zip "$BGUTIL_PLUGIN_URL"
+          node scripts/verify-runtime-file.mjs /tmp/bgutil-ytdlp-pot-provider.zip "$BGUTIL_PLUGIN_SHA"
           unzip -q /tmp/bgutil-ytdlp-pot-provider.zip -d src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
           if [ "${{ runner.os }}" = "Windows" ]; then
-            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot.exe "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-pot-windows-x86_64.exe"
+            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot.exe "$BGUTIL_URL"
+            node scripts/verify-runtime-file.mjs src-tauri/binaries/bgutil-pot.exe "$BGUTIL_SHA" "$BGUTIL_VERSION" --version
           elif [ "${{ runner.os }}" = "macOS" ]; then
-            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-pot-macos-aarch64"
+            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot "$BGUTIL_URL"
             chmod +x src-tauri/binaries/bgutil-pot
+            node scripts/verify-runtime-file.mjs src-tauri/binaries/bgutil-pot "$BGUTIL_SHA" "$BGUTIL_VERSION" --version
           else
-            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot "https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/${BGUTIL_VERSION}/bgutil-pot-linux-x86_64"
+            curl -L --fail --retry 3 -o src-tauri/binaries/bgutil-pot "$BGUTIL_URL"
             chmod +x src-tauri/binaries/bgutil-pot
+            node scripts/verify-runtime-file.mjs src-tauri/binaries/bgutil-pot "$BGUTIL_SHA" "$BGUTIL_VERSION" --version
           fi
+      - name: Bundle approved gallery-dl runtime
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          GALLERY_BIN="src-tauri/binaries/gallery-dl"
+          if [ "${{ runner.os }}" = "Windows" ]; then GALLERY_BIN="src-tauri/binaries/gallery-dl.exe"; fi
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            GALLERY_URL="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.url")"
+            GALLERY_SHA="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sha256")"
+            GALLERY_VERSION="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.version")"
+            curl -L --fail --retry 3 -o "$GALLERY_BIN" "$GALLERY_URL"
+            node scripts/verify-runtime-file.mjs "$GALLERY_BIN" "$GALLERY_SHA" "$GALLERY_VERSION" --version
+          else
+            test -x "$GALLERY_BIN"
+            GALLERY_SHA="$(node -p "require('./src-tauri/binaries/gallery-dl-build.json').artifactSha256")"
+            GALLERY_VERSION="$(node -p "require('./src-tauri/binaries/gallery-dl-build.json').sourceVersion")"
+            node scripts/verify-runtime-file.mjs "$GALLERY_BIN" "$GALLERY_SHA" "$GALLERY_VERSION" --version
+          fi
+
       - name: Add downloader resources to release bundle
         shell: bash
-        run: node -e "const fs=require('fs'); const file='src-tauri/tauri.conf.json'; const config=JSON.parse(fs.readFileSync(file,'utf8')); const extra=['binaries/yt-dlp','binaries/yt-dlp-plugins','binaries/bgutil-pot','binaries/bgutil-pot.exe'].filter(fs.existsSync); config.bundle.resources=[...(config.bundle.resources||[]),...extra]; fs.writeFileSync(file, JSON.stringify(config,null,2)+'\\n');"
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: node scripts/configure-runtime-resources.mjs
 
       - name: Bundle macOS FFmpeg dependencies
         if: startsWith(matrix.platform, 'macos')
@@ -157,43 +207,101 @@ jobs:
           codesign --force --sign - --timestamp=none src-tauri/binaries/ffmpeg
           codesign --force --sign - --timestamp=none src-tauri/binaries/ffprobe
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build Tauri App & Create Release
-        uses: tauri-apps/tauri-action@v0
+      - name: Write runtime binary manifest
+        shell: bash
+        run: node scripts/write-runtime-manifest.mjs src-tauri/binaries
+
+      - name: Add generated runtime manifest to release resources
+        shell: bash
+        run: node -e "const fs=require('fs'); const file='src-tauri/tauri.conf.json'; const config=JSON.parse(fs.readFileSync(file,'utf8')); const item='binaries/runtime-manifest.json'; config.bundle.resources=[...(config.bundle.resources||[]),...(!config.bundle.resources?.includes(item)&&fs.existsSync(item)?[item]:[])]; fs.writeFileSync(file, JSON.stringify(config,null,2)+'\\n');"
+
+      - name: Build Tauri app and installer
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LCMS2_STATIC: '1'
+        run: npm run tauri build -- ${{ matrix.args }}
+
+      - name: Build deterministic macOS DMG
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: npm run build:macos-dmg
+
+      - name: Verify packaged runtime bundle
+        shell: bash
+        run: |
+          BUNDLE_ROOT="src-tauri/target/${{ matrix.target }}/release"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            APP_PATH="$(find "$BUNDLE_ROOT/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
+            node scripts/verify-runtime-bundle.mjs "$APP_PATH" --require-downloader --require-gallery
+          else
+            node scripts/verify-runtime-bundle.mjs "$BUNDLE_ROOT" --require-downloader --windows --require-gallery
+          fi
+
+      - name: Run packaged media smoke test
+        shell: bash
+        run: |
+          BUNDLE_ROOT="src-tauri/target/${{ matrix.target }}/release"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            APP_PATH="$(find "$BUNDLE_ROOT/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
+            node scripts/smoke-test-packaged-runtime.mjs "$APP_PATH"
+          else
+            node scripts/smoke-test-packaged-runtime.mjs "$BUNDLE_ROOT" --windows
+          fi
+
+      - name: Verify and smoke-test installed Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installer = Get-ChildItem (Join-Path $bundleRoot 'bundle/nsis/*.exe') | Select-Object -First 1
+          if ($null -eq $installer) { throw 'NSIS installer was not produced.' }
+          $header = [System.IO.File]::ReadAllBytes($installer.FullName)
+          if ($header.Length -lt 2 -or [char]$header[0] -ne 'M' -or [char]$header[1] -ne 'Z') { throw 'NSIS installer is not a PE executable.' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'nd-image-converter-installed'
+          if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS silent install failed with exit code $($install.ExitCode)." }
+          $installedExe = Join-Path $installDir 'ND Image Converter.exe'
+          if (-not (Test-Path $installedExe)) { throw "Installed app executable is missing: $installedExe" }
+          node scripts/verify-runtime-bundle.mjs $installDir --windows --require-downloader --require-gallery
+          node scripts/smoke-test-packaged-runtime.mjs $installDir --windows
+          $process = Start-Process -FilePath $installedExe -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) { throw "Installed app exited during launch check with code $($process.ExitCode)." }
+          Stop-Process -Id $process.Id -Force
+          $uninstaller = Join-Path $installDir 'uninstall.exe'
+          if (Test-Path $uninstaller) {
+            $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+            if ($uninstall.ExitCode -ne 0) { throw "NSIS silent uninstall failed with exit code $($uninstall.ExitCode)." }
+          }
+
+      - name: Collect internal release artifacts
+        shell: bash
+        env:
+          ARTIFACT_LABEL: ${{ github.event.inputs.artifact_label || format('v0.9.0-{0}', github.sha) }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/nd-release-artifacts"
+          mkdir -p "$output"
+          bundle_root="src-tauri/target/${{ matrix.target }}/release"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            app_path="$(find "$bundle_root/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
+            ditto -c -k --sequesterRsrc --keepParent "$app_path" "$output/ND Image Converter_${{ matrix.target }}.app.zip"
+            cp "$bundle_root/bundle/dmg/ND Image Converter_0.9.0_${{ startsWith(matrix.target, 'aarch64') && 'aarch64' || 'x64' }}.dmg" "$output/"
+          else
+            cp "$bundle_root/bundle/nsis/"*.exe "$output/"
+          fi
+          printf 'artifact_label=%s\ntarget=%s\ncommit=%s\n' "$ARTIFACT_LABEL" "${{ matrix.target }}" "$GITHUB_SHA" > "$output/BUILD-METADATA.txt"
+          shasum -a 256 "$output"/* > "$output/SHA256SUMS.txt"
+
+      - name: Upload internal CI artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.9.0-dev.{0}', github.run_number) || github.ref_name) }}
-          releaseName: "ND Image Converter ${{ github.event.inputs.release_tag || (github.ref_name == 'dev' && format('v0.9.0-dev.{0}', github.run_number) || github.ref_name) }}"
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
-          releaseBody: |
-            ### 🔒 Privacy & Security Notice
-            **ND Image Converter is 100% open-source, safe, and contains NO malware or telemetry.**
-            Because the app is not code-signed with expensive Apple Developer or Microsoft certificates, your operating system may show a security prompt upon first launch.
-
-            ---
-
-            ### 🍏 macOS Installation Guide
-            If macOS displays an error like *"App is damaged and can't be opened"* or blocks the app via Gatekeeper:
-            1. Drag **ND Image Converter** into your `/Applications` folder.
-            2. Open **Terminal** and run the following command to remove the quarantine flag:
-            ```bash
-            sudo xattr -cr /Applications/ND\ Image\ Converter.app
-            ```
-            3. Enter your Mac password when prompted, then open the app normally.
-            > *Alternative:* Right-click the app in Finder $\rightarrow$ Select **Open** $\rightarrow$ Click **Open** in the confirmation dialog.
-
-            ---
-
-            ### 🪟 Windows Installation Guide
-            If Windows SmartScreen displays *"Windows protected your PC"*:
-            1. Click **More info**.
-            2. Click **Run anyway**.
-            3. *(If required)* Right-click the installer/app and choose **Run as administrator**.
-
-            ---
-            *All conversions are processed 100% locally on your machine.*
+          name: nd-image-converter-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ runner.temp }}/nd-release-artifacts
+          if-no-files-found: error
+          retention-days: 14

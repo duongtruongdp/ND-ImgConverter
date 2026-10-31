@@ -12,6 +12,14 @@ dist
 dist-ssr
 .output/
 *.local
+.vite/
+.tmp/
+tmp/
+benchmark-output/
+src-tauri/binaries/.staging/
+*.gif.part
+*.mp4.part
+*.download
 
 # Editor directories and files
 .vscode/*
