@@ -60,7 +60,12 @@ fn rollback_engine(engine: String) -> Result<engine_update::EngineStatus, String
 }
 
 #[tauri::command]
-fn install_engine_update(request: engine_update::InstallRequest) -> Result<engine_update::EngineStatus, String> {
+fn install_engine_update(
+    _state: State<'_, AppState>,
+    mut request: engine_update::InstallRequest,
+) -> Result<engine_update::EngineStatus, String> {
+    request.active_jobs = request.active_jobs.max(download::active_job_count());
+    engine_update::validate_install_asset(&request.asset)?;
     engine_update::install_from_staging(request)
 }
 
@@ -70,7 +75,6 @@ async fn download_engine_update(
     state: State<'_, AppState>,
     asset: engine_update::EngineAsset,
 ) -> Result<String, String> {
-    state.is_engine_update_cancelled.store(false, Ordering::SeqCst);
     let cancel = state.is_engine_update_cancelled.clone();
     engine_update::download_verified_asset(&asset, &cancel, |completed, total| {
         let _ = app.emit("engine-update-progress", serde_json::json!({ "completed": completed, "total": total }));

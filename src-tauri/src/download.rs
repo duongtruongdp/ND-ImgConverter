@@ -24,6 +24,13 @@ fn active_job_flags() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
     ACTIVE_JOB_FLAGS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+pub fn active_job_count() -> u32 {
+    active_job_flags()
+        .lock()
+        .map(|jobs| jobs.len() as u32)
+        .unwrap_or(0)
+}
+
 pub fn begin(job_id: &str) {
     cancel_flag().store(false, Ordering::SeqCst);
     if let Ok(mut active) = active_job_id().lock() {

@@ -17,9 +17,9 @@
 ## Threats still requiring evidence
 
 - A real HTTPS mock-server integration suite is not yet present for truncation, cancellation, redirect, private-address and disk-full cases.
-- The command surface still needs to be wired so a future frontend can only download assets from a verified manifest, rather than treating a caller-provided allowlist as trust.
+- The frontend command re-reads and verifies the manifest, requires the exact requested asset, and derives its download host from that verified asset; the installer command repeats the trusted-asset check.
 - Archive extraction/symlink validation is not applicable to the current single-file staged asset path; any future archive format must add a traversal-safe extractor before use.
-- Publisher key custody, revocation and production manifest hosting are not configured.
+- Publisher key custody, key revocation and production manifest hosting are not configured.
 - Actual packaged binaries have not passed clean-machine health checks.
 
 The safe production setting is to keep live engine updates disabled until those items have evidence.

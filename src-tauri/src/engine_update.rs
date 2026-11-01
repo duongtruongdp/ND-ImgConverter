@@ -8,7 +8,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MANIFEST_SCHEMA: u32 = 1;
@@ -16,6 +16,8 @@ const STAGING_DIR: &str = "staging";
 const MIN_FREE_SPACE: u64 = 64 * 1024 * 1024;
 const CHECK_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
 static UPDATE_LOCK: Mutex<()> = Mutex::new(());
+static DOWNLOAD_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+static DOWNLOAD_BUSY: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -257,6 +259,27 @@ pub(crate) async fn download_verified_asset<F>(
 where
     F: FnMut(u64, u64),
 {
+    if DOWNLOAD_BUSY.swap(true, Ordering::SeqCst) {
+        return Err("Another engine update is already in progress.".into());
+    }
+    let result = download_verified_asset_inner(asset, cancel, progress).await;
+    DOWNLOAD_BUSY.store(false, Ordering::SeqCst);
+    result
+}
+
+async fn download_verified_asset_inner<F>(
+    asset: &EngineAsset,
+    cancel: &AtomicBool,
+    progress: F,
+) -> Result<String, String>
+where
+    F: FnMut(u64, u64),
+{
+    let _download_guard = DOWNLOAD_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
+    cancel.store(false, Ordering::SeqCst);
     if !trusted_manifest_enabled() {
         return Err("Verified engine updates are disabled until a trusted publisher key is configured.".into());
     }
@@ -429,8 +452,10 @@ fn current_platform() -> (&'static str, &'static str) {
 
 fn asset_matches_target(asset: &EngineAsset) -> bool {
     let (platform, architecture) = current_platform();
-    (asset.platform == platform || asset.platform == "universal")
-        && (asset.architecture == architecture || asset.architecture == "universal")
+    let architecture_matches = asset.architecture == "universal"
+        || asset.architecture == architecture
+        || (asset.architecture == "arm64" && architecture == "aarch64");
+    (asset.platform == platform || asset.platform == "universal") && architecture_matches
 }
 
 fn asset_supported_by_app(asset: &EngineAsset) -> bool {
@@ -485,23 +510,48 @@ fn verify_manifest(manifest: &EngineUpdateManifest) -> Result<(), String> {
     if manifest.schema_version != MANIFEST_SCHEMA {
         return Err("unsupported update manifest schema".into());
     }
-    let Some(public_key) = std::env::var("ND_ENGINE_UPDATE_PUBLIC_KEY").ok() else {
+    let Some(public_key) = std::env::var("ND_ENGINE_UPDATE_PUBLIC_KEY")
+        .ok()
+        .or_else(|| option_env!("ND_ENGINE_UPDATE_PUBLIC_KEY").map(str::to_string)) else {
         return Err("publisher public key is not configured".into());
     };
     let public_key = base64::engine::general_purpose::STANDARD
         .decode(public_key)
         .map_err(|error| format!("publisher public key is not valid base64: {error}"))?;
-    if let Ok(expected_key_id) = std::env::var("ND_ENGINE_UPDATE_KEY_ID") {
-        if manifest
-            .signature
-            .as_ref()
-            .map(|signature| signature.key_id.as_str())
-            != Some(expected_key_id.as_str())
-        {
-            return Err("update manifest uses an unknown signing key".into());
-        }
+    let expected_key_id = std::env::var("ND_ENGINE_UPDATE_KEY_ID")
+        .ok()
+        .or_else(|| option_env!("ND_ENGINE_UPDATE_KEY_ID").map(str::to_string))
+        .ok_or_else(|| "publisher key id is not configured".to_string())?;
+    if manifest
+        .signature
+        .as_ref()
+        .map(|signature| signature.key_id.as_str())
+        != Some(expected_key_id.as_str())
+    {
+        return Err("update manifest uses an unknown signing key".into());
     }
     verify_manifest_signature(manifest, &public_key)
+}
+
+fn verified_manifest_asset(asset: &EngineAsset) -> Result<(), String> {
+    if !trusted_manifest_enabled() {
+        return Err("verified engine updates are disabled by default".into());
+    }
+    let path = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST")
+        .ok_or_else(|| "no trusted engine update manifest is configured".to_string())?;
+    let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
+    let manifest: EngineUpdateManifest = serde_json::from_slice(&data)
+        .map_err(|error| format!("the trusted update manifest is invalid: {error}"))?;
+    verify_manifest(&manifest)?;
+    if manifest.assets.iter().any(|candidate| candidate == asset) {
+        Ok(())
+    } else {
+        Err("the requested engine asset is not present in the verified manifest".into())
+    }
+}
+
+pub(crate) fn validate_install_asset(asset: &EngineAsset) -> Result<(), String> {
+    verified_manifest_asset(asset)
 }
 
 fn available_space(path: &Path) -> Option<u64> {
@@ -917,5 +967,58 @@ mod tests {
         assert!(install_from_staging(request)
             .unwrap_err()
             .contains("deferred"));
+    }
+
+    #[test]
+    #[ignore = "requires two authentic local yt-dlp executables and mutates a temporary managed runtime"]
+    fn installs_real_ytdlp_reports_version_and_rolls_back() {
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries/yt-dlp");
+        let alternate = PathBuf::from("/opt/homebrew/bin/yt-dlp");
+        if !bundled.is_file() || !alternate.is_file() {
+            panic!("authentic local yt-dlp binaries are required for this acceptance test");
+        }
+        let version = |path: &Path| {
+            let output = std::process::Command::new(path)
+                .arg("--version")
+                .output()
+                .expect("yt-dlp must start");
+            assert!(output.status.success());
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+        let old_version = version(&bundled);
+        let new_version = version(&alternate);
+        assert_ne!(old_version, new_version, "acceptance test needs two real versions");
+        let root = std::env::temp_dir().join(format!("nd-engine-real-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        std::env::set_var("ND_MEDIA_ENGINES_DIR", &root);
+        let make_asset = |path: &Path, version: &str| EngineAsset {
+            engine: "yt-dlp".into(),
+            version: version.into(),
+            channel: "stable".into(),
+            platform: std::env::consts::OS.into(),
+            architecture: std::env::consts::ARCH.into(),
+            download_url: "https://updates.example.invalid/yt-dlp".into(),
+            sha256: sha256_file(path).unwrap(),
+            size_bytes: fs::metadata(path).unwrap().len(),
+            publisher: "ND local acceptance".into(),
+            min_app_version: "0.9.0".into(),
+            companions: Vec::new(),
+            license: "Unlicense".into(),
+            file_name: "yt-dlp".into(),
+        };
+        let old_asset = make_asset(&bundled, &old_version);
+        let new_asset = make_asset(&alternate, &new_version);
+        install_from_staging(InstallRequest { asset: old_asset.clone(), staged_path: bundled.to_string_lossy().into_owned(), active_jobs: 0 }).unwrap();
+        let first = inventory().into_iter().find(|item| item.key == "yt-dlp").unwrap();
+        assert_eq!(first.installed_version.as_deref(), Some(old_version.as_str()));
+        install_from_staging(InstallRequest { asset: new_asset, staged_path: alternate.to_string_lossy().into_owned(), active_jobs: 0 }).unwrap();
+        let second = inventory().into_iter().find(|item| item.key == "yt-dlp").unwrap();
+        assert_eq!(second.installed_version.as_deref(), Some(new_version.as_str()));
+        assert!(second.rollback_available);
+        let restored = rollback("yt-dlp").unwrap();
+        assert_eq!(restored.installed_version.as_deref(), Some(old_version.as_str()));
+        std::env::remove_var("ND_MEDIA_ENGINES_DIR");
+        let _ = fs::remove_dir_all(root);
     }
 }

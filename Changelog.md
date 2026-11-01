@@ -12,6 +12,7 @@ All notable changes and feature releases for **ND Image Converter** are document
 ### Engine Updates
 - Added signed-manifest asset matching before an engine asset can be downloaded, plus Update/Restore controls and update progress in About → Media Engines.
 - Live engine updates remain disabled until a trusted publisher key and manifest are configured.
+- Added the canonical Ed25519 publisher tool, required stable key IDs, backend active-job enforcement, serialized update downloads, and M3.7 test/custody documentation.
 
 ## [v0.9.0] - 2026-08-28
 

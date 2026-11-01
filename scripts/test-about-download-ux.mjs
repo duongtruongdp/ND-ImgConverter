@@ -45,7 +45,7 @@ test('downloader keeps sign-in opt-in and exposes the compact multi-source queue
   assert.match(downloader, /Show more/);
   assert.match(downloader, /Browser sign-in/);
   assert.match(downloader, /label: 'No sign-in'/);
-  assert.match(downloader, /No clips yet\./);
+  assert.match(downloader, /No downloads yet\./);
   assert.doesNotMatch(downloader, />PO Token provider:/);
   assert.match(downloader, /Show folder/);
   assert.match(diagnostics, /refresh_runtime_diagnostics/);
