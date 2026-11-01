@@ -2,6 +2,17 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [Unreleased — M3.6]
+
+### Media Downloader
+- Reworked the downloader into a compact two-column workflow with multiline URL input, deduplication, independent analysis results, playlist/gallery selection, thumbnails, and a dedicated queue.
+- Separated output format and quality controls, added real MP3/M4A mapping, bounded parallel downloads, per-download fragment connections, persistent destination folders, and per-job progress/cancellation.
+- Added queue summaries, bytes/progress/actions, lighter empty states, and shorter operator-friendly copy while preserving Light/Dark themes.
+
+### Engine Updates
+- Added signed-manifest asset matching before an engine asset can be downloaded, plus Update/Restore controls and update progress in About → Media Engines.
+- Live engine updates remain disabled until a trusted publisher key and manifest are configured.
+
 ## [v0.9.0] - 2026-08-28
 
 ### Added

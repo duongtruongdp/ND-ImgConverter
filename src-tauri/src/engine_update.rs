@@ -25,7 +25,7 @@ pub struct ManifestSignature {
     pub value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineAsset {
     pub engine: String,
@@ -139,6 +139,9 @@ where
     if !asset_matches_target(asset) {
         return Err("Update architecture or platform does not match this app.".into());
     }
+    if !asset_supported_by_app(asset) {
+        return Err("This engine update requires a newer version of the app.".into());
+    }
     let url = reqwest::Url::parse(&asset.download_url)
         .map_err(|error| format!("update URL is invalid: {error}"))?;
     let host = url
@@ -244,6 +247,35 @@ where
     fs::rename(&target, &verified).map_err(|error| error.to_string())?;
     verify_asset_file(&verified, asset)?;
     Ok(verified.to_string_lossy().into_owned())
+}
+
+pub(crate) async fn download_verified_asset<F>(
+    asset: &EngineAsset,
+    cancel: &AtomicBool,
+    progress: F,
+) -> Result<String, String>
+where
+    F: FnMut(u64, u64),
+{
+    if !trusted_manifest_enabled() {
+        return Err("Verified engine updates are disabled until a trusted publisher key is configured.".into());
+    }
+    let path = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST")
+        .ok_or_else(|| "No trusted engine update manifest is configured.".to_string())?;
+    let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
+    let manifest: EngineUpdateManifest = serde_json::from_slice(&data)
+        .map_err(|error| format!("the trusted update manifest is invalid: {error}"))?;
+    verify_manifest(&manifest)?;
+    let verified = manifest
+        .assets
+        .iter()
+        .find(|candidate| *candidate == asset)
+        .ok_or_else(|| "The requested engine asset is not present in the verified manifest.".to_string())?;
+    let host = reqwest::Url::parse(&verified.download_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .ok_or_else(|| "The verified engine asset has no valid download host.".to_string())?;
+    download_asset(verified, &[host], cancel, progress).await
 }
 
 fn now_string() -> String {
@@ -399,6 +431,12 @@ fn asset_matches_target(asset: &EngineAsset) -> bool {
     let (platform, architecture) = current_platform();
     (asset.platform == platform || asset.platform == "universal")
         && (asset.architecture == architecture || asset.architecture == "universal")
+}
+
+fn asset_supported_by_app(asset: &EngineAsset) -> bool {
+    asset.min_app_version.trim().is_empty()
+        || compare_versions(env!("CARGO_PKG_VERSION"), &asset.min_app_version)
+            != std::cmp::Ordering::Less
 }
 
 fn trusted_manifest_enabled() -> bool {
@@ -575,12 +613,13 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
         .into_iter()
         .map(|item| (item.key, item.installed_version))
         .collect::<BTreeMap<_, _>>();
-    let updates = manifest
+    let updates: Vec<EngineAsset> = manifest
         .assets
         .into_iter()
         .filter(|asset| {
             validate_asset_shape(asset).is_ok()
                 && asset_matches_target(asset)
+                && asset_supported_by_app(asset)
                 && installed
                     .get(&asset.engine)
                     .and_then(|version| version.as_deref())
@@ -590,10 +629,11 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
                     .unwrap_or(true)
         })
         .collect();
+    let has_updates = !updates.is_empty();
     UpdateCheckResult {
-        state: "updateAvailable".into(),
+        state: if has_updates { "updateAvailable" } else { "upToDate" }.into(),
         checked_at,
-        message: "An update is ready.".into(),
+        message: if has_updates { "An engine update is ready." } else { "Everything is up to date." }.into(),
         updates,
     }
 }

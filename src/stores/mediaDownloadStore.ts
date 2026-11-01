@@ -8,7 +8,12 @@ export type MediaDownloadJob = {
   kind: MediaJobKind;
   url: string;
   title: string;
+  thumbnail?: string | null;
+  source?: string | null;
+  formatLabel?: string;
+  qualityLabel?: string;
   formatId?: string;
+  audioFormat?: string | null;
   audioAvailable?: boolean;
   maxHeight?: number | null;
   container?: string | null;
@@ -23,6 +28,9 @@ export type MediaDownloadJob = {
   totalBytes?: number | null;
   completedItems?: number | null;
   totalItems?: number | null;
+  speed?: string | null;
+  parallelDownloads?: number;
+  connections?: number;
   detail?: string;
   outputPath?: string;
   error?: string;

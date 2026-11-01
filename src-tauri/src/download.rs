@@ -2,13 +2,15 @@ use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::collections::HashMap;
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 static DOWNLOAD_CANCELLED: OnceLock<AtomicBool> = OnceLock::new();
 static ACTIVE_JOB_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static ACTIVE_JOB_FLAGS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
 
 fn cancel_flag() -> &'static AtomicBool {
     DOWNLOAD_CANCELLED.get_or_init(|| AtomicBool::new(false))
@@ -18,10 +20,17 @@ fn active_job_id() -> &'static Mutex<Option<String>> {
     ACTIVE_JOB_ID.get_or_init(|| Mutex::new(None))
 }
 
+fn active_job_flags() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+    ACTIVE_JOB_FLAGS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 pub fn begin(job_id: &str) {
     cancel_flag().store(false, Ordering::SeqCst);
     if let Ok(mut active) = active_job_id().lock() {
         *active = Some(job_id.to_string());
+    }
+    if let Ok(mut jobs) = active_job_flags().lock() {
+        jobs.insert(job_id.to_string(), Arc::new(AtomicBool::new(false)));
     }
 }
 
@@ -39,9 +48,18 @@ pub fn finish(job_id: &str) {
             cancel_flag().store(false, Ordering::SeqCst);
         }
     }
+    if let Ok(mut jobs) = active_job_flags().lock() {
+        jobs.remove(job_id);
+    }
 }
 
 pub fn cancel(job_id: &str) {
+    if let Ok(jobs) = active_job_flags().lock() {
+        if let Some(flag) = jobs.get(job_id) {
+            flag.store(true, Ordering::SeqCst);
+            return;
+        }
+    }
     let matches_active = active_job_id()
         .lock()
         .ok()
@@ -50,6 +68,14 @@ pub fn cancel(job_id: &str) {
     if matches_active {
         cancel_flag().store(true, Ordering::SeqCst);
     }
+}
+
+fn job_cancel_flag(job_id: &str) -> Arc<AtomicBool> {
+    active_job_flags()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(job_id).cloned())
+        .unwrap_or_else(|| Arc::new(AtomicBool::new(false)))
 }
 
 fn cancelled_error() -> String {
@@ -215,6 +241,10 @@ pub struct DownloadRequest {
     pub output_directory: Option<String>,
     pub playlist: bool,
     pub playlist_items: Option<String>,
+    #[serde(default)]
+    pub audio_format: Option<String>,
+    #[serde(default)]
+    pub connections: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -249,6 +279,7 @@ pub struct GalleryItem {
     pub url: String,
     pub extension: Option<String>,
     pub estimated_filesize: Option<u64>,
+    pub thumbnail: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -261,6 +292,7 @@ pub struct GalleryMetadata {
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadProgress {
+    pub job_id: Option<String>,
     pub status: String,
     pub percent: Option<f64>,
     pub detail: Option<String>,
@@ -268,6 +300,7 @@ pub struct DownloadProgress {
     pub total_bytes: Option<u64>,
     pub completed_items: Option<u64>,
     pub total_items: Option<u64>,
+    pub speed: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -500,7 +533,7 @@ fn parse_progress_percent(value: &str) -> Option<f64> {
         .ok()
 }
 
-fn emit_video_progress(app: &AppHandle, line: &str) -> bool {
+fn emit_video_progress(app: &AppHandle, job_id: &str, line: &str) -> bool {
     let Some(payload) = line.strip_prefix("ND_PROGRESS ") else {
         return false;
     };
@@ -511,9 +544,11 @@ fn emit_video_progress(app: &AppHandle, line: &str) -> bool {
         .get(3)
         .and_then(|value| parse_progress_number(value))
         .or_else(|| parts.get(4).and_then(|value| parse_progress_number(value)));
+    let speed = parts.get(5).map(|value| value.trim()).filter(|value| !value.is_empty()).map(str::to_string);
     let _ = app.emit(
         "download-progress",
         DownloadProgress {
+            job_id: Some(job_id.to_string()),
             status: if parts.first() == Some(&"finished") {
                 "processing".into()
             } else {
@@ -525,6 +560,7 @@ fn emit_video_progress(app: &AppHandle, line: &str) -> bool {
             total_bytes,
             completed_items: None,
             total_items: None,
+            speed,
         },
     );
     true
@@ -1039,7 +1075,7 @@ pub fn build_download_args(
         "--output".into(),
         output_template.into(),
         "--progress-template".into(),
-        "download:ND_PROGRESS %(progress.status)s|%(progress._percent_str)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s".into(),
+        "download:ND_PROGRESS %(progress.status)s|%(progress._percent_str)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress._speed_str)s".into(),
     ];
     if !request.playlist {
         args.push("--no-playlist".into());
@@ -1052,7 +1088,15 @@ pub fn build_download_args(
         args.extend(["--playlist-items".into(), items.into()]);
     }
     if request.format_id == "audio-only" {
-        args.extend(["--extract-audio".into(), "--audio-format".into(), "best".into()]);
+        let audio_format = request
+            .audio_format
+            .as_deref()
+            .filter(|value| matches!(*value, "mp3" | "m4a"))
+            .unwrap_or("best");
+        args.extend(["--extract-audio".into(), "--audio-format".into(), audio_format.into()]);
+    }
+    if let Some(connections) = request.connections.filter(|value| *value > 1) {
+        args.extend(["--concurrent-fragments".into(), connections.clamp(2, 16).to_string()]);
     }
     if let Some(container) = request
         .container
@@ -1067,7 +1111,8 @@ pub fn build_download_args(
     Ok(args)
 }
 
-pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, String> {
+pub fn download(app: AppHandle, request: DownloadRequest, job_id: &str) -> Result<String, String> {
+    let cancel = job_cancel_flag(job_id);
     validate_url(&request.url)?;
     if request.format_id.trim().is_empty() {
         return Err("Please select a video quality".into());
@@ -1140,13 +1185,13 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
     let mut status = None;
     let mut channel_closed = false;
     while !channel_closed || status.is_none() {
-        if cancel_flag().load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
             terminate_process_tree(&mut child);
             return Err(cancelled_error());
         }
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(ProcessLine::Stdout(line)) => {
-                if emit_video_progress(&app, &line) {
+                if emit_video_progress(&app, job_id, &line) {
                     continue;
                 }
                 if line.starts_with("[download]") {
@@ -1156,6 +1201,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
                     let _ = app.emit(
                         "download-progress",
                         DownloadProgress {
+                            job_id: Some(job_id.to_string()),
                             status: "downloading".into(),
                             percent,
                             detail: Some(line.clone()),
@@ -1163,6 +1209,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
                             total_bytes: None,
                             completed_items: None,
                             total_items: None,
+                            speed: None,
                         },
                     );
                 } else if let Some((_, path)) = line.split_once("Merging formats into ") {
@@ -1170,6 +1217,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
                     let _ = app.emit(
                         "download-progress",
                         DownloadProgress {
+                            job_id: Some(job_id.to_string()),
                             status: "processing".into(),
                             percent: None,
                             detail: Some(line.clone()),
@@ -1177,12 +1225,14 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
                             total_bytes: None,
                             completed_items: None,
                             total_items: None,
+                            speed: None,
                         },
                     );
                 } else if line.starts_with("[Merger]") || line.starts_with("[ExtractAudio]") {
                     let _ = app.emit(
                         "download-progress",
                         DownloadProgress {
+                            job_id: Some(job_id.to_string()),
                             status: "processing".into(),
                             percent: None,
                             detail: Some(line.clone()),
@@ -1190,6 +1240,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
                             total_bytes: None,
                             completed_items: None,
                             total_items: None,
+                            speed: None,
                         },
                     );
                 }
@@ -1211,7 +1262,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
         }
     }
     let status = status.unwrap_or_else(|| child.wait().expect("yt-dlp process status available"));
-    if cancel_flag().load(Ordering::SeqCst) {
+    if cancel.load(Ordering::SeqCst) {
         return Err(cancelled_error());
     }
     if !status.success() {
@@ -1232,6 +1283,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
     let _ = app.emit(
         "download-progress",
         DownloadProgress {
+            job_id: Some(job_id.to_string()),
             status: "completed".into(),
             percent: Some(100.0),
             detail: Some(result.clone()),
@@ -1239,6 +1291,7 @@ pub fn download(app: AppHandle, request: DownloadRequest) -> Result<String, Stri
             total_bytes: None,
             completed_items: None,
             total_items: None,
+            speed: None,
         },
     );
     Ok(result)
@@ -1353,6 +1406,12 @@ pub fn parse_gallery_metadata(json: &str) -> Result<GalleryMetadata, String> {
             estimated_filesize: metadata
                 .get("filesize")
                 .and_then(serde_json::Value::as_u64),
+            thumbnail: metadata
+                .get("thumbnail")
+                .or_else(|| metadata.get("thumb"))
+                .or_else(|| metadata.get("preview"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
         });
     }
     if items.is_empty() {
@@ -1393,7 +1452,8 @@ pub fn analyze_gallery(request: &GalleryAnalyzeRequest) -> Result<GalleryMetadat
         .map_err(|error| gallery_error(&error))
 }
 
-pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Result<String, String> {
+pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest, job_id: &str) -> Result<String, String> {
+    let cancel = job_cancel_flag(job_id);
     validate_url(&request.url)?;
     let directory = request
         .output_directory
@@ -1423,6 +1483,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
     let _ = app.emit(
         "download-progress",
         DownloadProgress {
+            job_id: Some(job_id.to_string()),
             status: "downloading".into(),
             percent: None,
             detail: Some("Downloading images…".into()),
@@ -1430,6 +1491,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
             total_bytes: None,
             completed_items: Some(0),
             total_items: request.selected_indices.as_ref().map(|items| items.len() as u64),
+            speed: None,
         },
     );
     let mut command = Command::new(gallery);
@@ -1444,7 +1506,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
     let mut status = None;
     let mut channel_closed = false;
     while !channel_closed || status.is_none() {
-        if cancel_flag().load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) {
             terminate_process_tree(&mut child);
             return Err(cancelled_error());
         }
@@ -1455,6 +1517,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
                     let _ = app.emit(
                         "download-progress",
                         DownloadProgress {
+                            job_id: Some(job_id.to_string()),
                             status: "downloading".into(),
                             percent: total_items.filter(|total| *total > 0).map(|total| completed_items as f64 * 100.0 / total as f64),
                             detail: Some(line.clone()),
@@ -1462,6 +1525,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
                             total_bytes: None,
                             completed_items: Some(completed_items),
                             total_items,
+                            speed: None,
                         },
                     );
                 }
@@ -1484,6 +1548,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
     let _ = app.emit(
         "download-progress",
         DownloadProgress {
+            job_id: Some(job_id.to_string()),
             status: "completed".into(),
             percent: Some(100.0),
             detail: Some(output_directory.clone()),
@@ -1491,6 +1556,7 @@ pub fn download_gallery(app: AppHandle, request: GalleryDownloadRequest) -> Resu
             total_bytes: None,
             completed_items: total_items.or(Some(completed_items)),
             total_items,
+            speed: None,
         },
     );
     Ok(output_directory)
@@ -1538,6 +1604,8 @@ mod tests {
             output_directory: None,
             playlist: false,
             playlist_items: None,
+            audio_format: None,
+            connections: None,
         };
         let args = build_download_args(&request, "/tmp/%(title)s.%(ext)s").unwrap();
         assert!(args.contains(&"--no-overwrites".into()));
@@ -1568,6 +1636,8 @@ mod tests {
             output_directory: None,
             playlist: false,
             playlist_items: None,
+            audio_format: None,
+            connections: None,
         };
         let mp4_args = build_download_args(&base, "/tmp/%(title)s.%(ext)s").unwrap();
         assert!(mp4_args
@@ -1643,6 +1713,8 @@ mod tests {
             output_directory: None,
             playlist: false,
             playlist_items: None,
+            audio_format: None,
+            connections: None,
         };
         let args = build_download_args(&request, "/tmp/%(title)s.%(ext)s").unwrap();
         assert!(args.iter().any(|value| value.contains("[height=720]")));
@@ -1662,6 +1734,8 @@ mod tests {
             output_directory: None,
             playlist: false,
             playlist_items: None,
+            audio_format: None,
+            connections: None,
         };
         let args = build_download_args(&request, "/tmp/%(title)s.%(ext)s").unwrap();
         assert!(args.iter().any(|value| value == "bestvideo*+bestaudio/best"));
@@ -1680,10 +1754,32 @@ mod tests {
             output_directory: None,
             playlist: true,
             playlist_items: Some("1,3-4".into()),
+            audio_format: None,
+            connections: None,
         };
         let args = build_download_args(&request, "/tmp/%(playlist_index)s-%(title)s.%(ext)s").unwrap();
         assert!(!args.iter().any(|value| value == "--no-playlist"));
         assert!(args.windows(2).any(|pair| pair == ["--playlist-items", "1,3-4"]));
+    }
+
+    #[test]
+    fn maps_audio_format_and_fragment_connections_to_ytdlp() {
+        let request = DownloadRequest {
+            url: "https://example.com/audio".into(),
+            format_id: "audio-only".into(),
+            audio_available: true,
+            max_height: None,
+            container: None,
+            auth_browser: None,
+            output_directory: None,
+            playlist: false,
+            playlist_items: None,
+            audio_format: Some("mp3".into()),
+            connections: Some(99),
+        };
+        let args = build_download_args(&request, "/tmp/%(title)s.%(ext)s").unwrap();
+        assert!(args.windows(2).any(|pair| pair == ["--audio-format", "mp3"]));
+        assert!(args.windows(2).any(|pair| pair == ["--concurrent-fragments", "16"]));
     }
 
     #[test]

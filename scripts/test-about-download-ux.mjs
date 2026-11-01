@@ -28,25 +28,25 @@ test('advanced runtime sections load only after their details element opens', ()
   assert.match(engines, /requestRef/);
 });
 
-test('downloader keeps sign-in opt-in and hides provider details from the normal card', () => {
+test('downloader keeps sign-in opt-in and exposes the compact multi-source queue', () => {
   assert.match(downloader, /> Media Downloader</);
-  assert.match(downloader, /Best Available/);
-  assert.match(downloader, /Check playlist \/ collection/);
+  assert.match(downloader, /Paste one or more media links/);
+  assert.match(downloader, /Analyze links/);
+  assert.match(downloader, /MP4 video/);
+  assert.match(downloader, /Parallel downloads/);
+  assert.match(downloader, /Connections per download/);
   assert.match(downloader, /download_gallery_url/);
-  assert.match(downloader, /Select items/);
-  assert.match(downloader, /selectedPlaylist\.join\(','\)/);
-  assert.match(downloader, /Download selected/);
-  assert.match(downloader, /selectedIndices: selectedGallery/);
+  assert.match(downloader, /Select all/);
+  assert.match(downloader, /selectedIndexExpression\(source\.selectedPlaylist\)/);
+  assert.match(downloader, /selectedIndices: isGallery \? source\.selectedGallery/);
   assert.match(downloader, /jobId: job\.id/);
-  assert.match(downloader, /Interrupted — ready to retry/);
-  assert.match(downloader, /slice\(0, playlistVisibleCount\)/);
-  assert.match(downloader, /Sign-in \(optional\)/);
-  assert.match(downloader, /label: 'Not needed'/);
-  assert.match(downloader, /Use your browser session if this site asks you to sign in\./);
-  assert.match(downloader, /Technical details/);
+  assert.match(downloader, /Ready to retry/);
+  assert.match(downloader, /slice\(0, MAX_VISIBLE_ITEMS\)/);
+  assert.match(downloader, /Browser sign-in/);
+  assert.match(downloader, /label: 'No sign-in'/);
+  assert.match(downloader, /No clips yet\./);
   assert.doesNotMatch(downloader, />PO Token provider:/);
-  assert.match(downloader, /Download complete/);
-  assert.match(downloader, /Show in Finder \/ Explorer/);
+  assert.match(downloader, /Show folder/);
   assert.match(diagnostics, /refresh_runtime_diagnostics/);
   assert.match(engines, /refresh_engine_inventory/);
 });

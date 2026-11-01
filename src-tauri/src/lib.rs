@@ -69,11 +69,10 @@ async fn download_engine_update(
     app: AppHandle,
     state: State<'_, AppState>,
     asset: engine_update::EngineAsset,
-    allowed_hosts: Vec<String>,
 ) -> Result<String, String> {
     state.is_engine_update_cancelled.store(false, Ordering::SeqCst);
     let cancel = state.is_engine_update_cancelled.clone();
-    engine_update::download_asset(&asset, &allowed_hosts, &cancel, |completed, total| {
+    engine_update::download_verified_asset(&asset, &cancel, |completed, total| {
         let _ = app.emit("engine-update-progress", serde_json::json!({ "completed": completed, "total": total }));
     }).await
 }
@@ -114,7 +113,8 @@ async fn download_gallery_url(
     request: download::GalleryDownloadRequest,
 ) -> Result<String, String> {
     download::begin(&job_id);
-    let result = tauri::async_runtime::spawn_blocking(move || download::download_gallery(app, request))
+    let job_id_for_worker = job_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || download::download_gallery(app, request, &job_id_for_worker))
         .await
         .map_err(|e| e.to_string());
     download::finish(&job_id);
@@ -143,7 +143,8 @@ async fn download_video_url(
     request: download::DownloadRequest,
 ) -> Result<String, String> {
     download::begin(&job_id);
-    let result = tauri::async_runtime::spawn_blocking(move || download::download(app, request))
+    let job_id_for_worker = job_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || download::download(app, request, &job_id_for_worker))
         .await
         .map_err(|e| e.to_string());
     download::finish(&job_id);

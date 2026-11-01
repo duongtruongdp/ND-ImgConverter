@@ -10,6 +10,7 @@
     "test:timeline": "node --experimental-strip-types --test scripts/test-timeline.mjs",
     "test:video-gif-store": "node --experimental-strip-types --test scripts/test-video-gif-store.mjs",
     "test:media-queue": "node --experimental-strip-types --test scripts/test-media-queue.mjs",
+    "test:media-downloader-ux": "node --experimental-strip-types --test scripts/test-media-downloader-ux.mjs",
     "test:media-fixtures": "node scripts/test-media-fixtures.mjs",
     "test:about-download-ux": "node --test scripts/test-about-download-ux.mjs",
     "benchmark:gif": "node scripts/benchmark-gif.mjs",
