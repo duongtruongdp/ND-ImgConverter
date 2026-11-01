@@ -141,7 +141,7 @@ export const MediaEngines = () => {
   return <details className="mt-4 border-t border-zinc-800/80 pt-3" onToggle={(event) => { if (event.currentTarget.open && !loaded) void refresh(); }}>
     <summary className="cursor-pointer text-xs theme-text-secondary">Media Engines</summary>
     <div className="mt-2 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] theme-text-muted">Updates use a signed manifest and are off until a trusted publisher is configured.</p><button type="button" onClick={() => void checkForUpdates()} disabled={loading || Boolean(updating)} className="theme-surface-control flex h-8 items-center gap-1 rounded-lg border px-2 text-[11px]"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Check</button></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] theme-text-muted">{check?.state === 'disabled' || check?.state === 'offline' ? "Updates aren't configured yet." : 'Updates use a signed manifest.'}</p><button type="button" onClick={() => void checkForUpdates()} disabled={loading || Boolean(updating)} className="theme-surface-control flex h-8 items-center gap-1 rounded-lg border px-2 text-[11px]"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Check</button></div>
       {loading && <p className="text-[10px] theme-text-muted">Checking engines…</p>}
       {updating && <p className="text-[10px] text-blue-300">Updating {updating}… {updateProgress && updateProgress.total > 0 ? `${Math.round(updateProgress.completed / updateProgress.total * 100)}%` : 'preparing'}</p>}
       {error && <p className="text-[10px] theme-error">Couldn’t load media engines: {error}</p>}

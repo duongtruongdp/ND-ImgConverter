@@ -4,11 +4,13 @@
 
 Engine manifests use a separate Ed25519 trust domain from Tauri application updates. The signed bytes are the deterministic compact JSON representation of the manifest with `signature` set to `null`; this authenticates schema, publisher, asset URLs, hashes, sizes, versions, target identifiers, compatibility fields and licenses.
 
-The verifier is in `src-tauri/src/engine_update.rs`. It requires:
+The verifier is in `src-tauri/src/engine_update.rs`. Schema 2 requires:
 
 - `ND_ENABLE_ENGINE_UPDATES=1` in the controlled test/release environment;
 - a 32-byte base64 public key in `ND_ENGINE_UPDATE_PUBLIC_KEY`;
 - a stable expected key id in `ND_ENGINE_UPDATE_KEY_ID`;
+- a matching `staging` or `production` channel in `ND_ENGINE_UPDATE_CHANNEL`;
+- a positive manifest revision and non-expired publication/expiry window;
 - `algorithm: "ed25519"`, a non-empty key id and a valid base64 signature.
 
 Missing or invalid configuration fails closed. The production app must not embed a private key or accept an unsigned manifest.
@@ -31,7 +33,10 @@ Production configuration is intentionally not committed. The release build that 
 ND_ENABLE_ENGINE_UPDATES=1
 ND_ENGINE_UPDATE_PUBLIC_KEY=<base64 32-byte Ed25519 public key>
 ND_ENGINE_UPDATE_KEY_ID=nd-media-prod-1
-ND_ENGINE_UPDATE_MANIFEST=<trusted manifest path or approved manifest endpoint integration>
+ND_ENGINE_UPDATE_CHANNEL=production
+ND_ENGINE_UPDATE_HOST=updates.example.com
+ND_ENGINE_UPDATE_MANIFEST_URL=https://updates.example.com/manifests/0.9.0/production.json
+# Local controlled tests may use ND_ENGINE_UPDATE_MANIFEST instead of the URL.
 ```
 
 To sign a prepared manifest locally with a test-only key, generate the key outside the repository, then run:
@@ -47,4 +52,4 @@ Key rotation requires shipping a new trusted public key/key id before publishing
 
 ## Current state
 
-The signature verifier, canonical publisher tool and exact verified-asset download path are implemented, but no ND production public key, publisher service or remote manifest integration is present. The UI therefore reports that verified updates are unavailable. `ND_ENGINE_UPDATE_MANIFEST` is a local controlled-manifest input for testing; it is not a remote production update service.
+The signature verifier, canonical publisher tool, HTTPS manifest fetch and exact verified-asset download path are implemented. No ND production public key, publisher service or approved remote endpoint is configured, so the UI reports that verified updates are unavailable. `ND_ENGINE_UPDATE_MANIFEST` is a local controlled-manifest input for testing; it is not a remote production update service.

@@ -50,8 +50,8 @@ fn refresh_engine_inventory() -> Vec<engine_update::EngineStatus> {
 }
 
 #[tauri::command]
-fn check_engine_updates() -> engine_update::UpdateCheckResult {
-    engine_update::check_updates()
+async fn check_engine_updates() -> engine_update::UpdateCheckResult {
+    engine_update::check_updates().await
 }
 
 #[tauri::command]

@@ -16,7 +16,7 @@ const targetInfo = (target) => {
   return { platform, architecture, source: sourceRecords.targets[target], parts };
 };
 
-export const buildUnsignedManifest = ({ artifactDir, target, baseUrl, generatedAt = new Date().toISOString(), minAppVersion = packageVersion }) => {
+export const buildUnsignedManifest = ({ artifactDir, target, baseUrl, channel = 'staging', manifestRevision = 1, publishedAt = Math.floor(Date.now() / 1000), expiresAt = publishedAt + 7 * 24 * 60 * 60, generatedAt = new Date().toISOString(), minAppVersion = packageVersion }) => {
   if (!/^https:\/\/[^\s/]+/.test(baseUrl)) throw new Error('base URL must be HTTPS and include a host');
   const { platform, architecture, source } = targetInfo(target);
   if (!source) throw new Error(`no approved runtime source record exists for ${target}`);
@@ -31,6 +31,7 @@ export const buildUnsignedManifest = ({ artifactDir, target, baseUrl, generatedA
     const companions = engine === 'ffmpeg' ? ['ffprobe'] : engine === 'ffprobe' ? ['ffmpeg'] : [];
     assets.push({
       engine,
+      packageId: engine === 'ffmpeg' || engine === 'ffprobe' ? 'ffmpeg-suite' : engine,
       version: String(sourceRecord.version).replace(/^v/, ''),
       channel: 'stable',
       platform,
@@ -45,13 +46,13 @@ export const buildUnsignedManifest = ({ artifactDir, target, baseUrl, generatedA
       fileName,
     });
   }
-  return { schemaVersion: 1, generatedAt, publisher: 'ND Image Converter release team', signature: null, assets };
+  return { schemaVersion: 2, channel, manifestRevision, publishedAt, expiresAt, generatedAt, publisher: 'ND Image Converter release team', signature: null, assets };
 };
 
 if (process.argv[1]?.endsWith('prepare-engine-manifest.mjs')) {
   const [artifactDir, output, target, baseUrl] = process.argv.slice(2);
   if (!artifactDir || !output || !target || !baseUrl) throw new Error('Usage: node scripts/prepare-engine-manifest.mjs <artifact-dir> <unsigned.json> <target> <https-base-url>');
-  const manifest = buildUnsignedManifest({ artifactDir, target, baseUrl });
+  const manifest = buildUnsignedManifest({ artifactDir, target, baseUrl, channel: process.env.ND_ENGINE_UPDATE_CHANNEL || 'staging', manifestRevision: Number(process.env.ND_ENGINE_MANIFEST_REVISION || 1), expiresAt: Number(process.env.ND_ENGINE_MANIFEST_EXPIRES_AT || 0) || undefined });
   writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o644 });
   console.log(`Prepared unsigned engine manifest for ${target} with ${manifest.assets.length} approved assets.`);
 }

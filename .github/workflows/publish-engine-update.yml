@@ -1,0 +1,108 @@
+name: Prepare Engine Update (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Approved engine package to prepare"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ffmpeg-suite
+          - yt-dlp
+          - gallery-dl
+          - bgutil-pot
+      version:
+        description: "Approved package version from the source record"
+        required: true
+        type: string
+      target:
+        description: "Approved runtime target"
+        required: true
+        type: choice
+        options:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+          - x86_64-pc-windows-msvc
+      channel:
+        description: "Cryptographically separated channel"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      artifact_reference:
+        description: "Reviewed artifact bundle reference; this workflow does not fetch arbitrary URLs"
+        required: true
+        type: string
+      publication_intent:
+        description: "This repository only prepares and validates; publication remains external"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - prepare-only
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install publisher tooling dependencies
+        run: npm ci
+
+      - name: Reject unattended production publication
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          INTENT: ${{ inputs.publication_intent }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANNEL" = "production" ]; then
+            echo "Production publication is intentionally disabled in the application repository. Use the authorized engine-distribution repository and protected signing environment." >&2
+            exit 1
+          fi
+          test "$INTENT" = "dry-run" || test "$INTENT" = "prepare-only"
+
+      - name: Validate approved source records
+        env:
+          ND_RUNTIME_TARGET: ${{ inputs.target }}
+        run: node scripts/verify-release-sources.mjs
+
+      - name: Run canonical publisher checks
+        run: |
+          npm run test:engine-publisher
+          npm run test:engine-manifest
+
+      - name: Write non-secret preparation record
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ inputs.target }}
+          CHANNEL: ${{ inputs.channel }}
+          ARTIFACT_REFERENCE: ${{ inputs.artifact_reference }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nd-engine-update-plan"
+          node -e 'const fs=require("node:fs"); const p={package:process.env.PACKAGE,version:process.env.VERSION,target:process.env.TARGET,channel:process.env.CHANNEL,artifactReference:process.env.ARTIFACT_REFERENCE,publication:"not performed",sourceRepository:"application repository only"}; fs.writeFileSync(process.env.RUNNER_TEMP+"/nd-engine-update-plan/PLAN.json", JSON.stringify(p,null,2)+"\n")'
+
+      - name: Upload dry-run plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: nd-engine-update-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/nd-engine-update-plan/PLAN.json
+          retention-days: 3

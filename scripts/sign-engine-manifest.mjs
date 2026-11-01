@@ -5,6 +5,10 @@ const usage = 'Usage: node scripts/sign-engine-manifest.mjs <unsigned.json> <sig
 
 export const manifestForSigning = (manifest) => ({
   schemaVersion: manifest.schemaVersion,
+  channel: manifest.channel,
+  manifestRevision: manifest.manifestRevision,
+  publishedAt: manifest.publishedAt,
+  expiresAt: manifest.expiresAt,
   generatedAt: manifest.generatedAt,
   publisher: manifest.publisher,
   signature: null,

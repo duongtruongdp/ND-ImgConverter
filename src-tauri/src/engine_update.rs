@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const MANIFEST_SCHEMA: u32 = 1;
+const MANIFEST_SCHEMA: u32 = 2;
 const STAGING_DIR: &str = "staging";
 const MIN_FREE_SPACE: u64 = 64 * 1024 * 1024;
 const CHECK_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
@@ -31,6 +31,7 @@ pub struct ManifestSignature {
 #[serde(rename_all = "camelCase")]
 pub struct EngineAsset {
     pub engine: String,
+    pub package_id: String,
     pub version: String,
     pub channel: String,
     pub platform: String,
@@ -49,6 +50,10 @@ pub struct EngineAsset {
 #[serde(rename_all = "camelCase")]
 pub struct EngineUpdateManifest {
     pub schema_version: u32,
+    pub channel: String,
+    pub manifest_revision: u64,
+    pub published_at: u64,
+    pub expires_at: u64,
     pub generated_at: String,
     pub publisher: String,
     pub signature: Option<ManifestSignature>,
@@ -283,11 +288,13 @@ where
     if !trusted_manifest_enabled() {
         return Err("Verified engine updates are disabled until a trusted publisher key is configured.".into());
     }
-    let path = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST")
-        .ok_or_else(|| "No trusted engine update manifest is configured.".to_string())?;
-    let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
-    let manifest: EngineUpdateManifest = serde_json::from_slice(&data)
-        .map_err(|error| format!("the trusted update manifest is invalid: {error}"))?;
+    let manifest = if let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") {
+        let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
+        serde_json::from_slice(&data).map_err(|error| format!("the trusted update manifest is invalid: {error}"))?
+    } else {
+        let root = runtime::managed_root().ok_or_else(|| "managed media-engine directory is not initialized".to_string())?;
+        load_cached_manifest(&root)?
+    };
     verify_manifest(&manifest)?;
     let verified = manifest
         .assets
@@ -320,6 +327,10 @@ fn check_state_path(root: &Path) -> PathBuf {
     root.join("check-state.json")
 }
 
+fn verified_manifest_cache_path(root: &Path) -> PathBuf {
+    root.join(STAGING_DIR).join("verified-manifest.json")
+}
+
 fn recent_check(root: &Path) -> Option<String> {
     let data = fs::read(check_state_path(root)).ok()?;
     let value: serde_json::Value = serde_json::from_slice(&data).ok()?;
@@ -331,11 +342,96 @@ fn recent_check(root: &Path) -> Option<String> {
     }
 }
 
-fn record_check(root: &Path) {
+fn accepted_revision(root: &Path) -> Option<u64> {
+    let data = fs::read(check_state_path(root)).ok()?;
+    serde_json::from_slice::<serde_json::Value>(&data)
+        .ok()?
+        .get("manifestRevision")
+        .and_then(serde_json::Value::as_u64)
+}
+
+fn record_check(root: &Path, revision: u64) {
     let _ = write_atomic(
         &check_state_path(root),
-        &serde_json::json!({ "lastChecked": now_seconds() }),
+        &serde_json::json!({ "lastChecked": now_seconds(), "manifestRevision": revision }),
     );
+}
+
+fn configured_manifest_url() -> Option<String> {
+    std::env::var("ND_ENGINE_UPDATE_MANIFEST_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn configured_manifest_host() -> Option<String> {
+    std::env::var("ND_ENGINE_UPDATE_HOST")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+}
+
+async fn fetch_manifest_bytes() -> Result<Vec<u8>, String> {
+    if let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") {
+        return fs::read(path).map_err(|error| format!("Couldn't read the update manifest: {error}"));
+    }
+    let url = configured_manifest_url().ok_or_else(|| "No update manifest is configured.".to_string())?;
+    let parsed = reqwest::Url::parse(&url).map_err(|error| format!("update manifest URL is invalid: {error}"))?;
+    if parsed.scheme() != "https" {
+        return Err("update manifest URL must use HTTPS".into());
+    }
+    let expected_host = configured_manifest_host().ok_or_else(|| "update manifest host is not configured".to_string())?;
+    let host = parsed.host_str().ok_or_else(|| "update manifest URL has no host".to_string())?;
+    let local_test = matches!(
+        std::env::var("ND_ENGINE_UPDATE_TEST_LOCAL").as_deref(),
+        Ok("1") | Ok("true")
+    );
+    if !host.eq_ignore_ascii_case(&expected_host) {
+        return Err("update manifest host is not allowlisted".into());
+    }
+    if !local_test && is_private_ip(host) {
+        return Err("private or local update manifest destinations are blocked".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 3 || attempt.url().scheme() != "https" {
+                attempt.stop()
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .map_err(|error| format!("could not create secure manifest client: {error}"))?;
+    let response = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|error| format!("update manifest request failed: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("update manifest request failed with HTTP {}", response.status()));
+    }
+    if response.url().scheme() != "https"
+        || response
+            .url()
+            .host_str()
+            .is_none_or(|value| !value.eq_ignore_ascii_case(&expected_host))
+    {
+        return Err("update manifest redirected to an untrusted destination".into());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("could not read update manifest: {error}"))?;
+    if bytes.len() > 4 * 1024 * 1024 {
+        return Err("update manifest exceeds the configured size limit".into());
+    }
+    Ok(bytes.to_vec())
+}
+
+fn load_cached_manifest(root: &Path) -> Result<EngineUpdateManifest, String> {
+    let data = fs::read(verified_manifest_cache_path(root))
+        .map_err(|error| format!("no verified update manifest cache is available: {error}"))?;
+    serde_json::from_slice(&data).map_err(|error| format!("cached update manifest is invalid: {error}"))
 }
 
 fn load_active(root: &Path) -> ActiveManifest {
@@ -417,6 +513,7 @@ fn verify_asset_file(path: &Path, asset: &EngineAsset) -> Result<(), String> {
 fn validate_asset_shape(asset: &EngineAsset) -> Result<(), String> {
     for value in [
         &asset.engine,
+        &asset.package_id,
         &asset.version,
         &asset.channel,
         &asset.platform,
@@ -426,6 +523,9 @@ fn validate_asset_shape(asset: &EngineAsset) -> Result<(), String> {
         if !safe_component(value) {
             return Err("manifest contains an unsafe path or identifier".into());
         }
+    }
+    if asset.package_id != asset.engine && asset.package_id != "ffmpeg-suite" {
+        return Err("manifest contains an unknown engine package identity".into());
     }
     if asset.channel != "stable" {
         return Err("only the stable update channel is accepted by default".into());
@@ -471,6 +571,41 @@ fn trusted_manifest_enabled() -> bool {
     )
 }
 
+fn configured_channel() -> Option<String> {
+    std::env::var("ND_ENGINE_UPDATE_CHANNEL")
+        .ok()
+        .or_else(|| option_env!("ND_ENGINE_UPDATE_CHANNEL").map(str::to_string))
+        .filter(|value| matches!(value.as_str(), "staging" | "production"))
+}
+
+fn is_revoked_key(key_id: &str) -> bool {
+    std::env::var("ND_ENGINE_UPDATE_REVOKED_KEY_IDS")
+        .ok()
+        .or_else(|| option_env!("ND_ENGINE_UPDATE_REVOKED_KEY_IDS").map(str::to_string))
+        .map(|value| key_id_is_revoked(key_id, &value))
+        .unwrap_or(false)
+}
+
+fn key_id_is_revoked(key_id: &str, revoked_key_ids: &str) -> bool {
+    revoked_key_ids
+        .split(',')
+        .any(|item| item.trim() == key_id)
+}
+
+fn validate_manifest_window(published_at: u64, expires_at: u64, now: u64) -> Result<(), String> {
+    if published_at > now.saturating_add(300) {
+        return Err("update manifest publication time is in the future".into());
+    }
+    if expires_at <= now || expires_at <= published_at {
+        return Err("update manifest has expired or invalid validity bounds".into());
+    }
+    Ok(())
+}
+
+fn manifest_revision_is_older(candidate: u64, accepted: u64) -> bool {
+    candidate < accepted
+}
+
 fn canonical_manifest_bytes(manifest: &EngineUpdateManifest) -> Result<Vec<u8>, String> {
     let mut unsigned = manifest.clone();
     unsigned.signature = None;
@@ -510,6 +645,13 @@ fn verify_manifest(manifest: &EngineUpdateManifest) -> Result<(), String> {
     if manifest.schema_version != MANIFEST_SCHEMA {
         return Err("unsupported update manifest schema".into());
     }
+    if configured_channel().as_deref() != Some(manifest.channel.as_str()) {
+        return Err("update manifest channel is not trusted by this build".into());
+    }
+    if manifest.manifest_revision == 0 {
+        return Err("update manifest revision is missing".into());
+    }
+    validate_manifest_window(manifest.published_at, manifest.expires_at, now_seconds())?;
     let Some(public_key) = std::env::var("ND_ENGINE_UPDATE_PUBLIC_KEY")
         .ok()
         .or_else(|| option_env!("ND_ENGINE_UPDATE_PUBLIC_KEY").map(str::to_string)) else {
@@ -530,6 +672,9 @@ fn verify_manifest(manifest: &EngineUpdateManifest) -> Result<(), String> {
     {
         return Err("update manifest uses an unknown signing key".into());
     }
+    if is_revoked_key(&expected_key_id) {
+        return Err("update manifest signing key has been revoked".into());
+    }
     verify_manifest_signature(manifest, &public_key)
 }
 
@@ -537,11 +682,13 @@ fn verified_manifest_asset(asset: &EngineAsset) -> Result<(), String> {
     if !trusted_manifest_enabled() {
         return Err("verified engine updates are disabled by default".into());
     }
-    let path = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST")
-        .ok_or_else(|| "no trusted engine update manifest is configured".to_string())?;
-    let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
-    let manifest: EngineUpdateManifest = serde_json::from_slice(&data)
-        .map_err(|error| format!("the trusted update manifest is invalid: {error}"))?;
+    let manifest = if let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") {
+        let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
+        serde_json::from_slice(&data).map_err(|error| format!("the trusted update manifest is invalid: {error}"))?
+    } else {
+        let root = runtime::managed_root().ok_or_else(|| "managed media-engine directory is not initialized".to_string())?;
+        load_cached_manifest(&root)?
+    };
     verify_manifest(&manifest)?;
     if manifest.assets.iter().any(|candidate| candidate == asset) {
         Ok(())
@@ -597,7 +744,7 @@ pub(crate) fn inventory() -> Vec<EngineStatus> {
         .collect()
 }
 
-pub(crate) fn check_updates() -> UpdateCheckResult {
+pub(crate) async fn check_updates() -> UpdateCheckResult {
     let checked_at = Some(now_string());
     if !trusted_manifest_enabled() {
         return UpdateCheckResult {
@@ -608,14 +755,14 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
             updates: Vec::new(),
         };
     }
-    let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") else {
+    if std::env::var_os("ND_ENGINE_UPDATE_MANIFEST").is_none() && configured_manifest_url().is_none() {
         return UpdateCheckResult {
             state: "offline".into(),
             checked_at,
             message: "No update manifest is configured.".into(),
             updates: Vec::new(),
         };
-    };
+    }
     if let Some(root) = runtime::managed_root() {
         if let Some(last) = recent_check(&root) {
             return UpdateCheckResult {
@@ -626,7 +773,7 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
             };
         }
     }
-    let data = match fs::read(path) {
+    let data = match fetch_manifest_bytes().await {
         Ok(data) => data,
         Err(error) => {
             return UpdateCheckResult {
@@ -657,7 +804,25 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
         };
     }
     if let Some(root) = runtime::managed_root() {
-        record_check(&root);
+        if accepted_revision(&root)
+            .is_some_and(|revision| manifest_revision_is_older(manifest.manifest_revision, revision))
+        {
+            return UpdateCheckResult {
+                state: "failed".into(),
+                checked_at,
+                message: "The update manifest revision is older than the last accepted revision.".into(),
+                updates: Vec::new(),
+            };
+        }
+        if let Err(error) = write_atomic(&verified_manifest_cache_path(&root), &manifest) {
+            return UpdateCheckResult {
+                state: "failed".into(),
+                checked_at,
+                message: format!("Couldn't cache the verified update manifest: {error}"),
+                updates: Vec::new(),
+            };
+        }
+        record_check(&root, manifest.manifest_revision);
     }
     let installed = inventory()
         .into_iter()
@@ -665,7 +830,7 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
         .collect::<BTreeMap<_, _>>();
     let updates: Vec<EngineAsset> = manifest
         .assets
-        .into_iter()
+        .iter()
         .filter(|asset| {
             validate_asset_shape(asset).is_ok()
                 && asset_matches_target(asset)
@@ -678,6 +843,7 @@ pub(crate) fn check_updates() -> UpdateCheckResult {
                     })
                     .unwrap_or(true)
         })
+        .cloned()
         .collect();
     let has_updates = !updates.is_empty();
     UpdateCheckResult {
@@ -699,10 +865,19 @@ pub(crate) fn install_from_staging(request: InstallRequest) -> Result<EngineStat
     if !asset_matches_target(&request.asset) {
         return Err("Update architecture or platform does not match this app.".into());
     }
+    if !asset_supported_by_app(&request.asset) {
+        return Err("This engine update requires a newer version of the app.".into());
+    }
     let source = PathBuf::from(&request.staged_path);
     verify_asset_file(&source, &request.asset)?;
     let root = runtime::managed_root()
         .ok_or_else(|| "managed media-engine directory is not initialized".to_string())?;
+    let mut active = load_active(&root);
+    if let Some(current) = active.active.get(&request.asset.engine) {
+        if compare_versions(&request.asset.version, &current.version) == std::cmp::Ordering::Less {
+            return Err("Engine downgrade is blocked; use Restore Previous for an explicit local rollback.".into());
+        }
+    }
     let required = fs::metadata(&source)
         .map_err(|error| error.to_string())?
         .len()
@@ -731,7 +906,6 @@ pub(crate) fn install_from_staging(request: InstallRequest) -> Result<EngineStat
     if let Some(kind) = kind_for_engine(&request.asset.engine) {
         runtime::health_check(&target, kind)?;
     }
-    let mut active = load_active(&root);
     if let Some(previous) = active.active.insert(
         request.asset.engine.clone(),
         ActiveEngine {
@@ -852,6 +1026,7 @@ mod tests {
     fn asset() -> EngineAsset {
         EngineAsset {
             engine: "yt-dlp".into(),
+            package_id: "yt-dlp".into(),
             version: "2026.1".into(),
             channel: "stable".into(),
             platform: std::env::consts::OS.into(),
@@ -889,6 +1064,10 @@ mod tests {
     fn rejects_unsigned_manifest_even_when_update_is_not_enabled() {
         let manifest = EngineUpdateManifest {
             schema_version: MANIFEST_SCHEMA,
+            channel: "staging".into(),
+            manifest_revision: 1,
+            published_at: now_seconds(),
+            expires_at: now_seconds() + 3600,
             generated_at: "0".into(),
             publisher: "ND".into(),
             signature: None,
@@ -902,6 +1081,10 @@ mod tests {
         let signing = SigningKey::from_bytes(&[7u8; 32]);
         let mut manifest = EngineUpdateManifest {
             schema_version: MANIFEST_SCHEMA,
+            channel: "staging".into(),
+            manifest_revision: 1,
+            published_at: now_seconds(),
+            expires_at: now_seconds() + 3600,
             generated_at: "0".into(),
             publisher: "ND".into(),
             signature: None,
@@ -916,6 +1099,26 @@ mod tests {
         assert!(verify_manifest_signature(&manifest, signing.verifying_key().as_bytes()).is_ok());
         manifest.assets[0].version = "2026.2".into();
         assert!(verify_manifest_signature(&manifest, signing.verifying_key().as_bytes()).is_err());
+    }
+
+    #[test]
+    fn rejects_expired_or_future_manifest_windows() {
+        assert!(validate_manifest_window(90, 110, 100).is_ok());
+        assert!(validate_manifest_window(90, 100, 100).is_err());
+        assert!(validate_manifest_window(401, 500, 100).is_err());
+    }
+
+    #[test]
+    fn rejects_revoked_signing_key_ids() {
+        assert!(key_id_is_revoked("old-key", "other, old-key, retired"));
+        assert!(!key_id_is_revoked("new-key", "other, old-key, retired"));
+    }
+
+    #[test]
+    fn rejects_manifest_revision_replay() {
+        assert!(manifest_revision_is_older(41, 42));
+        assert!(!manifest_revision_is_older(42, 42));
+        assert!(!manifest_revision_is_older(43, 42));
     }
 
     #[test]
@@ -994,6 +1197,7 @@ mod tests {
         std::env::set_var("ND_MEDIA_ENGINES_DIR", &root);
         let make_asset = |path: &Path, version: &str| EngineAsset {
             engine: "yt-dlp".into(),
+            package_id: "yt-dlp".into(),
             version: version.into(),
             channel: "stable".into(),
             platform: std::env::consts::OS.into(),

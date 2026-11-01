@@ -4,12 +4,16 @@ import { generateKeyPairSync, verify } from 'node:crypto';
 import { canonicalManifestBytes, signManifest } from './sign-engine-manifest.mjs';
 
 const fixture = () => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
+  channel: 'staging',
+  manifestRevision: 1,
+  publishedAt: Math.floor(Date.now() / 1000),
+  expiresAt: Math.floor(Date.now() / 1000) + 3600,
   generatedAt: '2026-11-01T00:00:00Z',
   publisher: 'ND test publisher',
   signature: null,
   assets: [{
-    engine: 'yt-dlp', version: '2026.10.26', channel: 'stable', platform: 'darwin', architecture: 'arm64',
+    engine: 'yt-dlp', packageId: 'yt-dlp', version: '2026.10.26', channel: 'stable', platform: 'macos', architecture: 'arm64',
     downloadUrl: 'https://updates.example.invalid/yt-dlp', sha256: 'a'.repeat(64), sizeBytes: 12,
     publisher: 'yt-dlp project', minAppVersion: '0.9.0', companions: [], license: 'Unlicense', fileName: 'yt-dlp',
   }],

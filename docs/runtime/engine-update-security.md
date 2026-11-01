@@ -3,10 +3,12 @@
 ## Controls implemented
 
 - Ed25519 verification covers the complete canonical manifest metadata.
+- Schema 2 authenticates channel, package identity, publication/expiry bounds and a monotonic manifest revision; stale revisions and revoked configured key IDs fail closed.
 - Stable-channel, safe-component, platform and architecture checks reject malformed assets.
 - HTTPS is required; redirects are bounded and HTTPS-to-HTTP or unallowlisted final destinations are rejected.
 - Literal loopback, private, link-local and unique-local IP destinations are blocked except for an explicit local test override.
 - Downloads stream to staging, enforce a size limit, report progress and support cancellation.
+- Remote manifest retrieval is HTTPS-only, host-allowlisted, redirect-bounded and cached only after verification.
 - Expected size and SHA-256 are checked before install.
 - Managed files are installed under immutable engine/version directories.
 - Runtime health checks run before activation.
