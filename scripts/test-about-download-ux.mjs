@@ -41,7 +41,8 @@ test('downloader keeps sign-in opt-in and exposes the compact multi-source queue
   assert.match(downloader, /selectedIndices: isGallery \? source\.selectedGallery/);
   assert.match(downloader, /jobId: job\.id/);
   assert.match(downloader, /Ready to retry/);
-  assert.match(downloader, /slice\(0, MAX_VISIBLE_ITEMS\)/);
+  assert.match(downloader, /slice\(0, visibleCount\)/);
+  assert.match(downloader, /Show more/);
   assert.match(downloader, /Browser sign-in/);
   assert.match(downloader, /label: 'No sign-in'/);
   assert.match(downloader, /No clips yet\./);
