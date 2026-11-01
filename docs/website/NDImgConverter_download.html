@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ND Image Converter — Download</title>
+  <style>
+    :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #090d16; color: #e8eef9; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 20% 0%, #13294c 0, transparent 45%), #090d16; }
+    main { width: min(680px, 100%); border: 1px solid #263754; border-radius: 22px; padding: clamp(24px, 5vw, 48px); background: rgba(14, 25, 43, .94); box-shadow: 0 24px 80px rgba(0,0,0,.28); }
+    .eyebrow { color: #72a9ff; font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 10px 0 8px; font-size: clamp(1.8rem, 5vw, 2.8rem); letter-spacing: -.04em; }
+    .intro { margin: 0; color: #a9b8cf; line-height: 1.55; }
+    .recommendation { margin: 26px 0 14px; padding: 14px 16px; border: 1px solid #315ea5; border-radius: 14px; background: rgba(37, 99, 235, .13); }
+    .recommendation strong { display: block; color: #fff; margin-bottom: 4px; }
+    .downloads { display: grid; gap: 10px; margin-top: 12px; }
+    .download { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 15px 16px; border: 1px solid #2a3a54; border-radius: 14px; color: inherit; text-decoration: none; background: rgba(8, 15, 27, .5); transition: border-color .15s, transform .15s; }
+    .download:hover, .download:focus-visible { border-color: #4d8df7; transform: translateY(-1px); outline: none; }
+    .download span { display: block; color: #9fb0c9; font-size: .84rem; margin-top: 3px; }
+    .download b { font-size: .98rem; }
+    .button { flex: none; border-radius: 9px; padding: 9px 12px; background: #2563eb; color: white; font-size: .82rem; font-weight: 700; }
+    footer { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; font-size: .84rem; }
+    footer a { color: #86b5ff; }
+    .note { margin-top: 18px; color: #8798b1; font-size: .76rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">ND Image Converter · v0.9.0</div>
+    <h1>Download ND Image Converter</h1>
+    <p class="intro">Fast, local image and video tools with optional media downloading. Pick the installer for your Mac or Windows PC.</p>
+    <section class="recommendation" aria-live="polite">
+      <strong id="recommendation-title">Choose your installer</strong>
+      <span id="recommendation-copy">Your browser cannot safely determine the CPU architecture. The choices below are always available.</span>
+    </section>
+    <div class="downloads" id="downloads"></div>
+    <p class="note">These packages are currently unsigned/not notarized. Verify the SHA-256 checksums on the GitHub release before opening an installer. Do not disable Gatekeeper or SmartScreen globally.</p>
+    <footer>
+      <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/tag/v0.9.0">Release notes</a>
+      <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases">All GitHub Releases</a>
+    </footer>
+  </main>
+  <script>
+    // Fill these three URLs only after the corresponding v0.9.0 GitHub Release assets exist
+    // and their checksums have been verified. Empty values intentionally fall back to the release page.
+    const RELEASE_URL = 'https://github.com/duongtruongdp/ND-ImgConverter/releases/tag/v0.9.0';
+    const DOWNLOADS = {
+      'macos-arm64': { title: 'macOS · Apple Silicon', detail: 'M1, M2, M3, M4', url: '' },
+      'macos-x64': { title: 'macOS · Intel', detail: 'Intel Macs', url: '' },
+      'windows-x64': { title: 'Windows · x64', detail: '64-bit Windows', url: '' },
+    };
+    const cards = document.getElementById('downloads');
+    const title = document.getElementById('recommendation-title');
+    const copy = document.getElementById('recommendation-copy');
+    const browser = `${navigator.userAgent || ''} ${navigator.platform || ''}`.toLowerCase();
+    const architecture = `${navigator.userAgentData?.architecture || ''} ${browser}`.toLowerCase();
+    const detected = /windows/.test(browser) && /x64|win64|amd64|x86_64/.test(architecture) ? 'windows-x64'
+      : /macintosh|mac os x/.test(browser) && /arm64|aarch64/.test(architecture) ? 'macos-arm64'
+      : /macintosh|mac os x/.test(browser) && /x86_64|amd64/.test(architecture) ? 'macos-x64'
+      : '';
+    const labels = { 'macos-arm64': 'Apple Silicon', 'macos-x64': 'Intel', 'windows-x64': 'Windows x64' };
+    title.textContent = detected ? `Recommended: ${labels[detected]}` : 'Choose your installer';
+    copy.textContent = detected ? 'We found a likely match. You can still choose another installer below.' : 'Your browser cannot safely determine the CPU architecture. The choices below are always available.';
+    Object.entries(DOWNLOADS).forEach(([key, item]) => {
+      const link = document.createElement('a');
+      link.className = 'download';
+      link.href = item.url || RELEASE_URL;
+      link.innerHTML = `<div><b>${item.title}</b><span>${item.detail}</span></div><span class="button">${item.url ? 'Download' : 'Open release'}</span>`;
+      if (key === detected) link.setAttribute('aria-label', `${item.title}, recommended download`);
+      cards.appendChild(link);
+    });
+  </script>
+</body>
+</html>

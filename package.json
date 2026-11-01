@@ -16,6 +16,8 @@
     "prepare:engine-manifest": "node scripts/prepare-engine-manifest.mjs",
     "test:media-fixtures": "node scripts/test-media-fixtures.mjs",
     "test:about-download-ux": "node --test scripts/test-about-download-ux.mjs",
+    "test:app-updater": "node --experimental-strip-types --test scripts/test-app-updater.mjs",
+    "test:download-page": "node --test scripts/test-download-page.mjs",
     "benchmark:gif": "node scripts/benchmark-gif.mjs",
     "verify:runtime": "node scripts/verify-runtime-bundle.mjs src-tauri --require-downloader",
     "verify:release-sources": "node scripts/verify-release-sources.mjs",

@@ -10,6 +10,23 @@ on:
         description: "Internal artifact label"
         required: true
         default: "v0.9.0-rc"
+      release_tag:
+        description: "Exact tag to publish when the explicit publish gate is enabled"
+        required: true
+        default: "v0.9.0"
+      publish_release:
+        description: "Create a GitHub pre-release after all native jobs pass"
+        required: true
+        type: boolean
+        default: false
+      release_kind:
+        description: "Stable publication remains blocked until signing gates are closed"
+        required: true
+        type: choice
+        options:
+          - prerelease
+          - stable
+        default: prerelease
 
 jobs:
   release:
@@ -292,12 +309,21 @@ jobs:
           output="$RUNNER_TEMP/nd-release-artifacts"
           mkdir -p "$output"
           bundle_root="src-tauri/target/${{ matrix.target }}/release"
+          release_version="$(node -p "require('./package.json').version")"
           if [ "${{ runner.os }}" = "macOS" ]; then
             app_path="$(find "$bundle_root/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
             ditto -c -k --sequesterRsrc --keepParent "$app_path" "$output/ND Image Converter_${{ matrix.target }}.app.zip"
-            cp "$bundle_root/bundle/dmg/ND Image Converter_0.9.0_${{ startsWith(matrix.target, 'aarch64') && 'aarch64' || 'x64' }}.dmg" "$output/"
+            dmg_path="$(find "$bundle_root/bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+            test -n "$dmg_path" && test -f "$dmg_path"
+            if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+              cp "$dmg_path" "$output/ND-Image-Converter_${release_version}_macos-arm64.dmg"
+            else
+              cp "$dmg_path" "$output/ND-Image-Converter_${release_version}_macos-x64.dmg"
+            fi
           else
-            cp "$bundle_root/bundle/nsis/"*.exe "$output/"
+            installer_path="$(find "$bundle_root/bundle/nsis" -maxdepth 1 -type f -name '*.exe' -print -quit)"
+            test -n "$installer_path" && test -f "$installer_path"
+            cp "$installer_path" "$output/ND-Image-Converter_${release_version}_windows-x64-setup.exe"
           fi
           printf 'artifact_label=%s\ntarget=%s\ncommit=%s\n' "$ARTIFACT_LABEL" "${{ matrix.target }}" "$GITHUB_SHA" > "$output/BUILD-METADATA.txt"
           node scripts/write-sha256-sums.mjs "$output"
@@ -309,3 +335,71 @@ jobs:
           path: ${{ runner.temp }}/nd-release-artifacts
           if-no-files-found: error
           retention-days: 14
+
+  publish-release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+
+      - name: Reject unsafe or duplicate publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_KIND: ${{ inputs.release_kind }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_TAG" = "v0.9.0"
+          test "$RELEASE_KIND" = "prerelease"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A GitHub Release already exists for $RELEASE_TAG; refusing to overwrite it." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "The tag $RELEASE_TAG already exists; refusing to recreate it." >&2
+            exit 1
+          fi
+
+      - name: Download verified native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nd-image-converter-*
+          path: ${{ runner.temp }}/nd-release-artifacts
+          merge-multiple: false
+
+      - name: Assemble and verify public installer assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="$(node -p "require('./package.json').version")"
+          output="$RUNNER_TEMP/nd-public-release-assets"
+          mkdir -p "$output"
+          for name in \
+            "ND-Image-Converter_${RELEASE_VERSION}_macos-arm64.dmg" \
+            "ND-Image-Converter_${RELEASE_VERSION}_macos-x64.dmg" \
+            "ND-Image-Converter_${RELEASE_VERSION}_windows-x64-setup.exe"; do
+            source="$(find "$RUNNER_TEMP/nd-release-artifacts" -type f -name "$name" -print -quit)"
+            test -n "$source" && test -s "$source"
+            cp "$source" "$output/$name"
+          done
+          test "$(find "$output" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 3
+          head -c 2 "$output/ND-Image-Converter_${RELEASE_VERSION}_windows-x64-setup.exe" | grep -q 'MZ'
+          node scripts/write-sha256-sums.mjs "$output"
+          cat "$output/SHA256SUMS.txt"
+
+      - name: Publish labeled v0.9.0 pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ND Image Converter v0.9.0" \
+            --prerelease \
+            --notes-file docs/release/v0.9.0.md \
+            "$RUNNER_TEMP/nd-public-release-assets"/*

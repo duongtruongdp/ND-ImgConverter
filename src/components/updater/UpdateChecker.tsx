@@ -1,140 +1,110 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { Sparkles, Download, X } from 'lucide-react';
+import { Sparkles, Download, ExternalLink, X } from 'lucide-react';
+import {
+  type AppUpdateTarget,
+  type GitHubRelease,
+  type ReleaseUpdate,
+  resolveReleaseUpdate,
+  targetFromBrowser,
+  targetFromNativeTriple,
+} from './updateUtils';
 
 const GITHUB_REPO = 'duongtruongdp/ND-ImgConverter';
+const RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`;
+const stableDownloadPage = 'https://duongtruongdp.net/NDImgConverter_download';
+
+const targetLabel = (target: AppUpdateTarget) => {
+  if (target === 'macos-arm64') return 'macOS Apple Silicon';
+  if (target === 'macos-x64') return 'macOS Intel';
+  if (target === 'windows-x64') return 'Windows x64';
+  return 'your platform';
+};
+
+const readReleaseList = async (signal: AbortSignal): Promise<GitHubRelease[]> => {
+  const response = await fetch(RELEASES_API, {
+    signal,
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
+  const releases: unknown = await response.json();
+  return Array.isArray(releases) ? releases as GitHubRelease[] : [];
+};
 
 export const UpdateChecker = () => {
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [releaseUrl, setReleaseUrl] = useState<string>('');
+  const [update, setUpdate] = useState<ReleaseUpdate | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     const checkUpdate = async () => {
       try {
-        // 1. Get the current version of the running application.
-        const currentVersion = await getVersion();
-
-        // 2. GitHub API to get the latest release.
-        const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
-          {
-            headers: {
-              Accept: 'application/vnd.github.v3+json',
-            },
-          }
-        );
-
-        if (!response.ok) return;
-
-        const releases = await response.json();
-        if (!Array.isArray(releases) || releases.length === 0) return;
-
-        const stableReleases = releases.filter(
-          (release: any) =>
-            !release.draft &&
-            !release.prerelease &&
-            /^v?\d+\.\d+\.\d+$/.test(release.tag_name || '')
-        );
-        const latestRelease = stableReleases.sort((a: any, b: any) => {
-          const parse = (value: string) =>
-            value.replace(/^v/, '').split('.').map((part) => Number(part));
-          const left = parse(a.tag_name);
-          const right = parse(b.tag_name);
-          for (let index = 0; index < 3; index += 1) {
-            if (left[index] !== right[index]) return right[index] - left[index];
-          }
-          return 0;
-        })[0];
-
-        if (!latestRelease) return;
-
-        const tag = (latestRelease.tag_name || '').replace(/^v/, '');
-        const cleanCurrent = currentVersion.replace(/^v/, '').split('-')[0];
-        const currentParts: number[] = cleanCurrent.split('.').map(Number);
-        const latestParts: number[] = tag.split('.').map(Number);
-        const isNewer = latestParts.some(
-          (part: number, index: number) =>
-            part > (currentParts[index] || 0) &&
-            latestParts.slice(0, index).every((value: number, i: number) => value === (currentParts[i] || 0))
-        );
-
-        if (isNewer) {
-          setLatestVersion(tag);
-          setReleaseUrl(
-            `https://github.com/${GITHUB_REPO}/releases/tag/${latestRelease.tag_name}`
-          );
+        const [currentVersion, nativeTriple] = await Promise.all([
+          getVersion(),
+          invoke<string>('get_app_update_target').catch(() => null),
+        ]);
+        const nativeTarget = targetFromNativeTriple(nativeTriple);
+        const target = nativeTarget !== 'unknown' ? nativeTarget : targetFromBrowser(window.navigator);
+        const releases = await readReleaseList(controller.signal);
+        const nextUpdate = resolveReleaseUpdate(releases, currentVersion, target);
+        if (nextUpdate) {
+          setUpdate(nextUpdate);
           setIsOpen(true);
         }
-      } catch (err) {
-        console.error('Failed to check for updates:', err);
+      } catch (reason) {
+        if (!controller.signal.aborted) console.error('Failed to check for updates:', reason);
       }
     };
 
-    // Wait 800ms after the app finishes launching before calling the check
     const timer = setTimeout(checkUpdate, 800);
-    return () => clearTimeout(timer);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, []);
 
-  if (!isOpen || !latestVersion) return null;
+  if (!isOpen || !update) return null;
 
-  const handleOpenRelease = async () => {
+  const destination = update.installer?.browser_download_url || update.release.html_url || stableDownloadPage;
+  const hasInstaller = Boolean(update.installer);
+
+  const handleOpenDownload = async () => {
     try {
-      if (!releaseUrl) return;
-      await openUrl(releaseUrl);
+      await openUrl(destination);
       setIsOpen(false);
-    } catch (err) {
-      console.error('Failed to open release page:', err);
-      setError('Unable to open the download page. Copy this link into your browser.');
+    } catch (reason) {
+      console.error('Failed to open release download:', reason);
+      setError('Unable to open the download page. Please use the link below.');
     }
   };
 
   return (
-    <div className="theme-surface-elevated fixed top-14 right-6 border border-blue-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in slide-in-from-top-3 duration-300 max-w-sm select-none">
+    <div className="theme-surface-elevated fixed top-14 right-6 z-50 max-w-sm select-none rounded-2xl border border-blue-500/40 p-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-3 duration-300">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400">
-            <Sparkles className="w-4 h-4" />
-          </div>
+          <div className="rounded-lg bg-blue-500/20 p-1.5 text-blue-400"><Sparkles className="h-4 w-4" /></div>
           <div>
-            <h4 className="text-xs font-semibold theme-text-primary">Update Available</h4>
-            <p className="text-[11px] theme-text-secondary mt-0.5">
-              Version <span className="font-mono text-blue-400 font-medium">v{latestVersion}</span> is ready to download.
-            </p>
+            <h4 className="theme-text-primary text-xs font-semibold">Update Available</h4>
+            <p className="theme-text-secondary mt-0.5 text-[11px]">v<span className="font-mono font-medium text-blue-400">{update.version}</span> for {targetLabel(update.target)}.</p>
           </div>
         </div>
-        <button
-          onClick={() => setIsOpen(false)}
-          className="theme-text-muted hover:theme-text-primary p-1 transition cursor-pointer"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <button type="button" aria-label="Close update notice" onClick={() => setIsOpen(false)} className="theme-text-muted p-1 transition hover:theme-text-primary"><X className="h-3.5 w-3.5" /></button>
       </div>
 
+      {update.releaseNotes && <p className="theme-text-secondary mt-3 text-[11px] leading-relaxed">{update.releaseNotes}</p>}
+      {!hasInstaller && <p className="theme-text-muted mt-2 text-[10px] leading-relaxed">This release does not include the matching installer yet. Open the release page to choose another download.</p>}
+
       <div className="mt-3 flex items-center justify-end gap-2">
-        <button
-          onClick={() => setIsOpen(false)}
-          className="app-secondary-action text-[11px] px-3 py-1.5 rounded-lg theme-text-secondary transition cursor-pointer"
-        >
-          Later
-        </button>
-        <button
-          onClick={handleOpenRelease}
-          className="app-primary-action text-[11px] px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition cursor-pointer"
-        >
-          <Download className="w-3 h-3" /> Download Update
+        <button type="button" onClick={() => setIsOpen(false)} className="app-secondary-action theme-text-secondary rounded-lg px-3 py-1.5 text-[11px] transition">Later</button>
+        <button type="button" onClick={handleOpenDownload} className="app-primary-action flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium shadow-md shadow-blue-600/20 transition">
+          {hasInstaller ? <Download className="h-3 w-3" /> : <ExternalLink className="h-3 w-3" />}
+          {hasInstaller ? 'Download Update' : 'Open Release Page'}
         </button>
       </div>
-      {error && (
-        <div className="theme-error mt-2 text-[10px] leading-relaxed break-all">
-          <p>{error}</p>
-          <button type="button" onClick={handleOpenRelease} className="theme-link mt-1 text-left underline cursor-pointer">
-            {releaseUrl}
-          </button>
-        </div>
-      )}
+      {error && <p className="theme-error mt-2 break-all text-[10px] leading-relaxed">{error} <a className="theme-link underline" href={destination}>{destination}</a></p>}
     </div>
   );
 };

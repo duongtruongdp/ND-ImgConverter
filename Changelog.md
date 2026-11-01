@@ -14,6 +14,7 @@ All notable changes and feature releases for **ND Image Converter** are document
 - Live engine updates remain disabled until a trusted publisher key and manifest are configured.
 - Added the canonical Ed25519 publisher tool, required stable key IDs, backend active-job enforcement, serialized update downloads, and M3.7 test/custody documentation.
 - Hardened engine manifests with channel separation, package identity, expiry, monotonic revision checks, revocation configuration, remote HTTPS manifest retrieval, and a manual prepare-only publisher workflow.
+- Added OS-specific v0.9.0 installer naming/checksum staging, native-target application update selection, and a self-contained download-page package with cautious architecture detection.
 
 ## [v0.9.0] - 2026-08-28
 

@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/duongtruongdp/ND-ImgConverter/releases/latest">
+  <a href="https://duongtruongdp.net/NDImgConverter_download">
     <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.9.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
   </a>
 </p>
@@ -23,22 +23,23 @@
 
 ## ⚡ Quick Download & Install
 
-No terminal or programming tools required. Simply download the pre-built installer for your platform:
+No terminal or programming tools required. Use the stable download page to choose the installer for your platform:
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) & Intel | [Download latest release](https://github.com/duongtruongdp/ND-ImgConverter/releases/latest) |
-| **Windows** | `.exe` | x64 (64-bit) | [Download latest release](https://github.com/duongtruongdp/ND-ImgConverter/releases/latest) |
-| **Linux** | `.deb` | Ubuntu, Debian, Linux Mint | [Download latest release](https://github.com/duongtruongdp/ND-ImgConverter/releases/latest) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) | [Download for Mac](https://duongtruongdp.net/NDImgConverter_download) |
+| **macOS** | `.dmg` | Intel | [Download for Mac](https://duongtruongdp.net/NDImgConverter_download) |
+| **Windows** | `.exe` | x64 (64-bit) | [Download for Windows](https://duongtruongdp.net/NDImgConverter_download) |
+
+The page recommends a likely match when the browser can identify the operating system, while always keeping manual choices available. Linux installers are not advertised until a verified Linux package is built for this release.
 
 ### First-Time Launch Instructions
 
 * **macOS (first launch):**
   * Drag `ND Image Converter` into your `/Applications` folder.
-  * For an unsigned test build, right-click the app in Finder and select **Open**, or use **System Settings → Privacy & Security → Open Anyway** after verifying the release checksum.
-  * Production signed and notarized releases should not require a Gatekeeper override.
+  * These v0.9.0 packages are not notarized. Verify the release checksum, then use Finder's **Open** action if Gatekeeper asks for confirmation.
 * **Windows (SmartScreen warning):**
-  * When *"Windows protected your PC"* appears, click **More info** $\rightarrow$ **Run anyway** (this appears only because open-source projects lack paid $400/yr certificate signatures).
+  * Verify the release checksum. If SmartScreen asks for confirmation, review the publisher and choose whether to continue; do not disable SmartScreen globally.
 
 ---
 
@@ -54,7 +55,7 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 
 ### Image conversion and optimization
 
-- 🔒 **Privacy-first offline processing:** Files never leave the computer; no cloud upload, telemetry, or tracking.
+- 🔒 **Privacy-first local processing:** Image and video conversion stays on the computer; the optional downloader connects only when you ask it to fetch an online media URL.
 - ⚡ **Fast native engine:** Rust-based processing with `rayon` parallelism for responsive batch conversion.
 - 🖼 **Broad format support:** Convert common formats such as JPEG, PNG, WebP, AVIF, BMP, ICO, TIFF, TGA, GIF, EXR, and more.
 - 📷 **Camera RAW and DNG support:** Decode CR2, CR3, DNG, ARW, NEF, ORF, RAF, and other RAW formats through native demosaicing and embedded-preview handling.
@@ -83,7 +84,7 @@ Built with **Tauri 2**, **React**, and a multi-threaded **Rust processing engine
 - 👀 **Watch folder automation:** Monitor an input directory and route new image and video files using separate editable profiles.
 - 🔄 **Persistent tab sessions:** Keep queued files, video positions, trim points, and Watch Folder configuration while switching tabs.
 - 📁 **Native output-folder selection:** Choose an output directory through the operating system picker; defaults to the input folder.
-- 🔔 **GitHub release update checker:** Detect newer versions and open the official release download page.
+- 🔔 **GitHub release update checker:** Detect newer versions and open the matching macOS or Windows installer when it is available.
 - 🌐 **Video Downloader:** Analyze and download authorized public video URLs with selectable formats, optional browser-cookie authentication, progress reporting, and a bundled pinned `yt-dlp` engine.
 - 🛡 **YouTube stream support:** Release builds include the pinned `bgutil-ytdlp-pot-provider-rs` plugin/provider for YouTube PO Token requests when supported by the source.
 - 🖥 **Cross-platform desktop app:** Built with Tauri for macOS, Windows, and Linux with a lightweight native shell.
@@ -158,7 +159,7 @@ To install safely:
 
 - Click "More info" on the warning dialog
 - Click "Run anyway"
-ND Image Converter is 100% free with premium features — download from GitHub and verify it runs completely offline.
+ND Image Converter is free and privacy-first. Core image/video conversion runs locally; verify every release checksum before installing.
 
 
 ## 🗺 Roadmap
@@ -170,7 +171,7 @@ ND Image Converter is 100% free with premium features — download from GitHub a
 - [x] **v0.6** — Watermark Engine, EXIF Stripper, Linux Build Pipeline.
 - [x] **v0.7** — Video workflows: Video to GIF and core video conversion.
 - [x] **v0.8** — PDF/EXR fixes, Light Theme, VFR→CFR, multi-video conversion, Watch Folder profiles, Grab Stills.
-- [ ] **v0.9** — Online Video Downloader and downloader hardening/compatibility.
+- [x] **v0.9** — Online Video Downloader, queue workflows and downloader hardening/compatibility.
 - [ ] **v1.0** — Stable milestone with full cross-platform parity and production hardening.
 
 

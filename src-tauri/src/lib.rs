@@ -50,6 +50,16 @@ fn refresh_engine_inventory() -> Vec<engine_update::EngineStatus> {
 }
 
 #[tauri::command]
+fn get_app_update_target() -> String {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => "aarch64-apple-darwin".into(),
+        ("macos", "x86_64") => "x86_64-apple-darwin".into(),
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc".into(),
+        _ => "unknown".into(),
+    }
+}
+
+#[tauri::command]
 async fn check_engine_updates() -> engine_update::UpdateCheckResult {
     engine_update::check_updates().await
 }
@@ -545,6 +555,7 @@ pub fn run() {
             refresh_runtime_diagnostics,
             get_engine_inventory,
             refresh_engine_inventory,
+            get_app_update_target,
             check_engine_updates,
             rollback_engine,
             install_engine_update,
