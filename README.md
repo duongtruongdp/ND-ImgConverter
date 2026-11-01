@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://duongtruongdp.net/NDImgConverter_download">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release%20(v0.9.0)-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download Latest Release" />
+    <img src="https://img.shields.io/badge/Download-v0.9.0%20Pre--release-2563eb?style=for-the-badge&logo=github&logoColor=white" alt="Download v0.9.0 pre-release" />
   </a>
 </p>
 
@@ -23,15 +23,15 @@
 
 ## ⚡ Quick Download & Install
 
-No terminal or programming tools required. Use the stable download page to choose the installer for your platform:
+No terminal or programming tools required. v0.9.0 is currently a pre-release; use the verified GitHub assets below while the stable download page is being deployed:
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) | [Download for Mac](https://duongtruongdp.net/NDImgConverter_download) |
-| **macOS** | `.dmg` | Intel | [Download for Mac](https://duongtruongdp.net/NDImgConverter_download) |
-| **Windows** | `.exe` | x64 (64-bit) | [Download for Windows](https://duongtruongdp.net/NDImgConverter_download) |
+| **macOS** | `.dmg` | Apple Silicon (M1/M2/M3/M4) | [Download for Mac](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.9.0/ND-Image-Converter_0.9.0_macos-arm64.dmg) |
+| **macOS** | `.dmg` | Intel | [Download for Mac](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.9.0/ND-Image-Converter_0.9.0_macos-x64.dmg) |
+| **Windows** | `.exe` | x64 (64-bit) | [Download for Windows](https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.9.0/ND-Image-Converter_0.9.0_windows-x64-setup.exe) |
 
-The page recommends a likely match when the browser can identify the operating system, while always keeping manual choices available. Linux installers are not advertised until a verified Linux package is built for this release.
+The packaged page at `https://duongtruongdp.net/NDImgConverter_download` recommends a likely match when the browser can identify the operating system, while always keeping manual choices available. It still needs hosting-admin deployment; until then, use the GitHub assets above. Linux installers are not advertised until a verified Linux package is built for this release.
 
 ### First-Time Launch Instructions
 
