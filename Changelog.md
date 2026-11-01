@@ -2,6 +2,12 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [Unreleased — M4.0]
+
+### App Updates
+- Added independent Stable/Beta application update channels with persisted preference, SemVer-aware release filtering, exact native installer selection, safe missing-asset fallback, and manual About → App Updates checks.
+- Kept v0.9.0 browser-assisted downloads and documented the separate Tauri updater signing/bootstrap requirements.
+
 ## [Unreleased — M3.6]
 
 ### Media Downloader

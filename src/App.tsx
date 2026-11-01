@@ -32,7 +32,7 @@ import { useSettingsStore, DEFAULT_PRESETS } from './stores/settingsStore';
 import { ComparisonModal } from './components/comparison/ComparisonModal';
 import { AutomationTab } from './components/automation/AutomationTab';
 import { QualityAnalyzerPill } from './components/analyzer/QualityAnalyzerPill';
-import { UpdateChecker } from './components/updater/UpdateChecker';
+import { AppUpdatePanel, UpdateChecker } from './components/updater/UpdateChecker';
 import { VideoToGifTab } from './components/video/VideoToGifTab';
 import { VideoConverterTab } from './components/video/VideoConverterTab';
 import { GrabStillsTab } from './components/video/GrabStillsTab';
@@ -701,6 +701,7 @@ export default function App() {
               <button ref={aboutCloseButtonRef} type="button" onClick={() => setIsAboutOpen(false)} className="theme-text-muted hover:theme-text-primary p-1" aria-label="Close About dialog">×</button>
             </div>
             <div id="about-description" className="theme-text-secondary mt-5 space-y-2 text-xs"><p>Offline image and video conversion for creators and developers.</p><p>Developed by Trương Nguyễn Nhật Dương</p><p>License: MIT</p></div>
+            <AppUpdatePanel installedVersion={appVersion} />
             <RuntimeDiagnostics />
             <MediaEngines />
             <div className="mt-5 flex gap-2"><button type="button" onClick={() => void openRepository()} className="app-primary-action rounded-lg px-3 py-2 text-xs">Repository</button><button type="button" onClick={() => setIsAboutOpen(false)} className="app-secondary-action rounded-lg px-3 py-2 text-xs theme-text-secondary">Close</button></div>
