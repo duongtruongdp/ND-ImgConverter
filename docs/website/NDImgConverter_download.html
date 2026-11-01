@@ -41,13 +41,24 @@
     </footer>
   </main>
   <script>
-    // Fill these three URLs only after the corresponding v0.9.0 GitHub Release assets exist
-    // and their checksums have been verified. Empty values intentionally fall back to the release page.
+    // These URLs point to the verified v0.9.0 assets. A missing URL intentionally falls back to the release page.
     const RELEASE_URL = 'https://github.com/duongtruongdp/ND-ImgConverter/releases/tag/v0.9.0';
     const DOWNLOADS = {
-      'macos-arm64': { title: 'macOS · Apple Silicon', detail: 'M1, M2, M3, M4', url: '' },
-      'macos-x64': { title: 'macOS · Intel', detail: 'Intel Macs', url: '' },
-      'windows-x64': { title: 'Windows · x64', detail: '64-bit Windows', url: '' },
+      'macos-arm64': {
+        title: 'macOS · Apple Silicon',
+        detail: 'M1, M2, M3, M4',
+        url: 'https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.9.0/ND-Image-Converter_0.9.0_macos-arm64.dmg'
+      },
+      'macos-x64': {
+        title: 'macOS · Intel',
+        detail: 'Intel Macs',
+        url: 'https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.9.0/ND-Image-Converter_0.9.0_macos-x64.dmg'
+      },
+      'windows-x64': {
+        title: 'Windows · x64',
+        detail: '64-bit Windows',
+        url: 'https://github.com/duongtruongdp/ND-ImgConverter/releases/download/v0.9.0/ND-Image-Converter_0.9.0_windows-x64-setup.exe'
+      },
     };
     const cards = document.getElementById('downloads');
     const title = document.getElementById('recommendation-title');

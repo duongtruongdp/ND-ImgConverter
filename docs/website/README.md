@@ -8,11 +8,10 @@ The current endpoint still redirects visitors to the old combined v0.8.4 ZIP. It
 
 ## Deployment
 
-1. Publish the verified v0.9.0 GitHub Release first.
-2. From the GitHub Release API, copy the exact `browser_download_url` values for the three installer assets into the `DOWNLOADS` object in `NDImgConverter_download.html`.
-3. Verify each URL returns the expected installer type and compare its downloaded SHA-256 with `SHA256SUMS.txt`.
-4. Replace the current direct-file redirect with this page, preserving the existing `/NDImgConverter_download` path.
-5. Keep the old ZIP available at its existing URL until the new page has been checked from a clean browser session.
+1. The verified v0.9.0 GitHub pre-release is published and its exact asset URLs are already populated in `NDImgConverter_download.html`.
+2. Verify each URL returns the expected installer type and compare its downloaded SHA-256 with the release `SHA256SUMS.txt`.
+3. Replace the current direct-file redirect with this page, preserving the existing `/NDImgConverter_download` path.
+4. Keep the old ZIP available at its existing URL until the new page has been checked from a clean browser session.
 
 The page does not start a download automatically. Browser signals are treated as a recommendation only; all three manual choices remain visible. Mac CPU architecture is intentionally shown as uncertain when the browser cannot prove it.
 
