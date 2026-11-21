@@ -19,6 +19,7 @@ const friendlyStatus = (status: string) => {
   if (status === 'notExecutable') return 'Not executable';
   if (status === 'wrongArchitecture') return 'Wrong architecture';
   if (status === 'missingSharedLibrary') return 'Missing shared library';
+  if (status === 'healthCheckFailed') return 'Health check failed';
   if (status === 'unsupportedVersion') return 'Unsupported or invalid';
   return 'Unavailable';
 };

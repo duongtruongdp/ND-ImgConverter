@@ -1,15 +1,18 @@
 use serde::Serialize;
 use std::env;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::process::{Command, Output, Stdio};
 use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 static MANAGED_ROOT: OnceLock<PathBuf> = OnceLock::new();
-static DIAGNOSTIC_CACHE: OnceLock<Mutex<Option<(Instant, Vec<RuntimeDiagnostic>)>>> = OnceLock::new();
+static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
+static DIAGNOSTIC_CACHE: OnceLock<Mutex<Option<(Instant, Vec<RuntimeDiagnostic>)>>> =
+    OnceLock::new();
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum BinaryKind {
@@ -46,12 +49,22 @@ impl BinaryKind {
     }
 
     fn bundled_names(self) -> &'static [&'static str] {
-        match self {
-            Self::Ffmpeg => &["ffmpeg.exe", "ffmpeg"],
-            Self::Ffprobe => &["ffprobe.exe", "ffprobe"],
-            Self::YtDlp => &["yt-dlp.exe", "yt-dlp"],
-            Self::GalleryDl => &["gallery-dl.exe", "gallery-dl"],
-            Self::BgutilPot => &["bgutil-pot.exe", "bgutil-pot"],
+        if cfg!(target_os = "windows") {
+            match self {
+                Self::Ffmpeg => &["ffmpeg.exe"],
+                Self::Ffprobe => &["ffprobe.exe"],
+                Self::YtDlp => &["yt-dlp.exe"],
+                Self::GalleryDl => &["gallery-dl.exe"],
+                Self::BgutilPot => &["bgutil-pot.exe"],
+            }
+        } else {
+            match self {
+                Self::Ffmpeg => &["ffmpeg"],
+                Self::Ffprobe => &["ffprobe"],
+                Self::YtDlp => &["yt-dlp"],
+                Self::GalleryDl => &["gallery-dl"],
+                Self::BgutilPot => &["bgutil-pot"],
+            }
         }
     }
 
@@ -68,12 +81,17 @@ pub(crate) struct ResolvedBinary {
     pub path: String,
     pub source: &'static str,
     pub version: String,
+    pub candidates: Vec<RuntimeCandidate>,
 }
 
 pub(crate) fn initialize(app: &AppHandle) {
     if let Ok(path) = app.path().app_data_dir() {
         let _ = MANAGED_ROOT.set(path.join("media-engines"));
     }
+    if let Ok(path) = app.path().resource_dir() {
+        let _ = RESOURCE_DIR.set(path);
+    }
+    invalidate_diagnostics_cache();
 }
 
 pub(crate) fn managed_root() -> Option<PathBuf> {
@@ -84,6 +102,19 @@ pub(crate) fn managed_root() -> Option<PathBuf> {
         }
     }
     MANAGED_ROOT.get().cloned()
+}
+
+pub(crate) fn resource_directory() -> Option<String> {
+    RESOURCE_DIR
+        .get()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+pub(crate) fn executable_directory() -> Option<String> {
+    env::current_exe().ok().and_then(|path| {
+        path.parent()
+            .map(|parent| parent.to_string_lossy().into_owned())
+    })
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -98,6 +129,21 @@ pub struct RuntimeDiagnostic {
     pub architecture: String,
     pub detail: Option<String>,
     pub capabilities: Vec<String>,
+    pub candidates: Vec<RuntimeCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCandidate {
+    pub path: String,
+    pub exists: bool,
+    pub selected: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct ResolveFailure {
+    pub message: String,
+    pub candidates: Vec<RuntimeCandidate>,
 }
 
 #[derive(Debug)]
@@ -107,32 +153,64 @@ struct ValidationFailure {
 }
 
 pub(crate) fn resource_path(relative: &str) -> Option<String> {
-    let exe = env::current_exe().ok()?;
-    let dir = exe.parent()?;
-    let resource_roots = if cfg!(target_os = "macos") {
-        vec![
-            dir.join("../Resources"),
-            dir.join("../Resources/resources"),
-            dir.join("resources"),
-            dir.join("../.."),
-        ]
-    } else {
-        vec![
-            dir.join("resources"),
-            dir.join("../resources"),
-            dir.join("resources/resources"),
-            dir.join("../.."),
-        ]
-    };
-    resource_roots
+    runtime_resource_roots()
         .into_iter()
         .map(|root| root.join(relative))
         .find(|path| path.exists())
         .map(|path| path.to_string_lossy().into_owned())
 }
 
+fn runtime_resource_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let mut add = |path: PathBuf| {
+        if !roots.iter().any(|existing| existing == &path) {
+            roots.push(path);
+        }
+    };
+
+    if let Some(path) = RESOURCE_DIR.get() {
+        // Tauri's resource_dir() is authoritative for packaged apps. On Windows,
+        // resources configured as "binaries/foo.exe" are placed directly below it.
+        add(path.clone());
+        add(path.join("resources"));
+    }
+
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // Keep the executable directory first-class: this is the Windows NSIS
+            // layout observed in installed v0.9.0 packages.
+            add(dir.to_path_buf());
+            add(dir.join("resources"));
+            if cfg!(target_os = "macos") {
+                add(dir.join("../Resources"));
+                add(dir.join("../Resources/resources"));
+                add(dir.join("../.."));
+            } else {
+                add(dir.join("../resources"));
+                add(dir.join("resources/resources"));
+                add(dir.join("../.."));
+            }
+        }
+    }
+
+    roots
+}
+
+fn bundled_candidate_paths(name: &str) -> Vec<PathBuf> {
+    candidate_paths_from_roots(runtime_resource_roots(), name)
+}
+
+fn candidate_paths_from_roots(roots: Vec<PathBuf>, name: &str) -> Vec<PathBuf> {
+    roots
+        .into_iter()
+        .map(|root| root.join("binaries").join(name))
+        .collect()
+}
+
 pub(crate) fn resolve_path(kind: BinaryKind) -> Result<String, String> {
-    resolve(kind).map(|binary| binary.path)
+    resolve(kind)
+        .map(|binary| binary.path)
+        .map_err(|failure| failure.message)
 }
 
 pub(crate) fn resolve_optional_path(kind: BinaryKind) -> Option<String> {
@@ -172,10 +250,17 @@ pub(crate) fn diagnostics() -> Vec<RuntimeDiagnostic> {
     items
 }
 
-fn resolve(kind: BinaryKind) -> Result<ResolvedBinary, String> {
+fn resolve(kind: BinaryKind) -> Result<ResolvedBinary, ResolveFailure> {
     let mut failures = Vec::new();
+    let mut candidates = Vec::new();
 
     if let Some(path) = managed_candidate(kind) {
+        let candidate_index = candidates.len();
+        candidates.push(RuntimeCandidate {
+            path: path.to_string_lossy().into_owned(),
+            exists: path.is_file(),
+            selected: false,
+        });
         match validate(&path, kind) {
             Ok(version) => {
                 if matches!(kind, BinaryKind::Ffmpeg | BinaryKind::Ffprobe)
@@ -190,24 +275,43 @@ fn resolve(kind: BinaryKind) -> Result<ResolvedBinary, String> {
                         path: path.to_string_lossy().into_owned(),
                         source: "managed",
                         version,
+                        candidates: mark_selected(candidates, candidate_index),
                     });
                 }
             }
-            Err(failure) => failures.push(format!("managed {}: {}", kind.key(), failure.detail)),
+            Err(failure) => failures.push(format!(
+                "managed {} ({}): {}",
+                kind.key(),
+                failure.status,
+                failure.detail
+            )),
         }
     }
 
     for name in kind.bundled_names() {
-        if let Some(path) = resource_path(&format!("binaries/{name}")) {
-            match validate(Path::new(&path), kind) {
+        for path in bundled_candidate_paths(name) {
+            let candidate_index = candidates.len();
+            candidates.push(RuntimeCandidate {
+                path: path.to_string_lossy().into_owned(),
+                exists: path.is_file(),
+                selected: false,
+            });
+            if !path.is_file() {
+                continue;
+            }
+            match validate(&path, kind) {
                 Ok(version) => {
                     return Ok(ResolvedBinary {
-                        path,
+                        path: path.to_string_lossy().into_owned(),
                         source: "bundled",
                         version,
+                        candidates: mark_selected(candidates, candidate_index),
                     });
                 }
-                Err(failure) => failures.push(format!("bundled {name}: {}", failure.detail)),
+                Err(failure) => failures.push(format!(
+                    "bundled {name} ({}): {}",
+                    failure.status, failure.detail
+                )),
             }
         }
     }
@@ -215,22 +319,32 @@ fn resolve(kind: BinaryKind) -> Result<ResolvedBinary, String> {
     if let Ok(configured) = env::var(kind.env_name()) {
         let configured = configured.trim();
         if !configured.is_empty() {
+            let candidate_index = candidates.len();
+            candidates.push(RuntimeCandidate {
+                path: configured.into(),
+                exists: Path::new(configured).is_file(),
+                selected: false,
+            });
             match validate(Path::new(configured), kind) {
                 Ok(version) => {
                     return Ok(ResolvedBinary {
                         path: configured.into(),
                         source: "explicit",
                         version,
+                        candidates: mark_selected(candidates, candidate_index),
                     });
                 }
                 Err(failure) => {
-                    return Err(format!(
-                        "{} ({}) at {}: {}",
-                        kind.label(),
-                        failure.status,
-                        configured,
-                        failure.detail
-                    ));
+                    return Err(ResolveFailure {
+                        message: format!(
+                            "{} ({}) at {}: {}",
+                            kind.label(),
+                            failure.status,
+                            configured,
+                            failure.detail
+                        ),
+                        candidates,
+                    });
                 }
             }
         }
@@ -243,15 +357,25 @@ fn resolve(kind: BinaryKind) -> Result<ResolvedBinary, String> {
             .find(|name| !name.ends_with(".exe"))
             .copied()
             .unwrap_or(kind.key());
+        let candidate_index = candidates.len();
+        candidates.push(RuntimeCandidate {
+            path: command.into(),
+            exists: false,
+            selected: false,
+        });
         match validate_command(command, kind) {
             Ok(version) => {
                 return Ok(ResolvedBinary {
                     path: command.into(),
                     source: "system",
                     version,
+                    candidates: mark_selected(candidates, candidate_index),
                 });
             }
-            Err(failure) => failures.push(format!("system {command}: {}", failure.detail)),
+            Err(failure) => failures.push(format!(
+                "system {command} ({}): {}",
+                failure.status, failure.detail
+            )),
         }
     }
 
@@ -260,7 +384,17 @@ fn resolve(kind: BinaryKind) -> Result<ResolvedBinary, String> {
     } else {
         failures.join("; ")
     };
-    Err(format!("{} unavailable: {detail}", kind.label()))
+    Err(ResolveFailure {
+        message: format!("{} unavailable: {detail}", kind.label()),
+        candidates,
+    })
+}
+
+fn mark_selected(mut candidates: Vec<RuntimeCandidate>, selected: usize) -> Vec<RuntimeCandidate> {
+    if let Some(candidate) = candidates.get_mut(selected) {
+        candidate.selected = true;
+    }
+    candidates
 }
 
 fn managed_media_pair_is_compatible(kind: BinaryKind, version: &str) -> bool {
@@ -330,15 +464,20 @@ fn diagnose(kind: BinaryKind) -> RuntimeDiagnostic {
             architecture: env::consts::ARCH.into(),
             detail: None,
             capabilities: capabilities(kind),
+            candidates: binary.candidates,
         },
         Err(error) => {
-            let status = if error.contains("not executable") {
+            let status = if error.message.contains("not executable") {
                 "notExecutable"
-            } else if error.contains("wrong architecture") {
+            } else if error.message.contains("wrong architecture") {
                 "wrongArchitecture"
-            } else if error.contains("shared library") {
+            } else if error.message.contains("shared library") {
                 "missingSharedLibrary"
-            } else if error.contains("unsupported") {
+            } else if error.message.contains("execution blocked")
+                || error.message.contains("execution timed out")
+            {
+                "healthCheckFailed"
+            } else if error.message.contains("unsupported") {
                 "unsupportedVersion"
             } else {
                 "missing"
@@ -351,8 +490,9 @@ fn diagnose(kind: BinaryKind) -> RuntimeDiagnostic {
                 path: None,
                 version: None,
                 architecture: env::consts::ARCH.into(),
-                detail: Some(error),
+                detail: Some(error.message),
                 capabilities: Vec::new(),
+                candidates: error.candidates,
             }
         }
     }
@@ -432,10 +572,14 @@ fn validate_command(command: &str, kind: BinaryKind) -> Result<String, Validatio
     run_version(Path::new(command), kind)
 }
 
-fn run_version(path: &Path, kind: BinaryKind) -> Result<String, ValidationFailure> {
-    let output = Command::new(path)
-        .args(kind.version_args())
-        .output()
+const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn run_command(path: &Path, args: &[&str]) -> Result<Output, ValidationFailure> {
+    let mut child = Command::new(path)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| {
             let status = match error.kind() {
                 std::io::ErrorKind::PermissionDenied => "not executable",
@@ -447,6 +591,77 @@ fn run_version(path: &Path, kind: BinaryKind) -> Result<String, ValidationFailur
                 detail: error.to_string(),
             }
         })?;
+    let stdout = child.stdout.take().map(|mut stream| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stream.read_to_end(&mut bytes).map(|_| bytes)
+        })
+    });
+    let stderr = child.stderr.take().map(|mut stream| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stream.read_to_end(&mut bytes).map(|_| bytes)
+        })
+    });
+
+    let deadline = Instant::now() + HEALTH_CHECK_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout.and_then(|handle| handle.join().ok());
+                let _ = stderr.and_then(|handle| handle.join().ok());
+                return Err(ValidationFailure {
+                    status: "execution timed out",
+                    detail: format!(
+                        "health check exceeded {} seconds",
+                        HEALTH_CHECK_TIMEOUT.as_secs()
+                    ),
+                });
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout.and_then(|handle| handle.join().ok());
+                let _ = stderr.and_then(|handle| handle.join().ok());
+                return Err(ValidationFailure {
+                    status: "execution blocked",
+                    detail: error.to_string(),
+                });
+            }
+        }
+    };
+
+    Ok(Output {
+        status,
+        stdout: collect_output(stdout)?,
+        stderr: collect_output(stderr)?,
+    })
+}
+
+fn collect_output(
+    handle: Option<std::thread::JoinHandle<io::Result<Vec<u8>>>>,
+) -> Result<Vec<u8>, ValidationFailure> {
+    let Some(handle) = handle else {
+        return Ok(Vec::new());
+    };
+    handle
+        .join()
+        .map_err(|_| ValidationFailure {
+            status: "execution blocked",
+            detail: "output reader panicked".into(),
+        })?
+        .map_err(|error| ValidationFailure {
+            status: "execution blocked",
+            detail: format!("could not read process output: {error}"),
+        })
+}
+
+fn run_version(path: &Path, kind: BinaryKind) -> Result<String, ValidationFailure> {
+    let output = run_command(path, kind.version_args())?;
     if !output.status.success() {
         let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let lower = detail.to_lowercase();
@@ -472,7 +687,14 @@ fn run_version(path: &Path, kind: BinaryKind) -> Result<String, ValidationFailur
             },
         });
     }
-    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let version = {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        } else {
+            stdout
+        }
+    };
     if version.is_empty() {
         return Err(ValidationFailure {
             status: "unsupported version",
@@ -480,13 +702,10 @@ fn run_version(path: &Path, kind: BinaryKind) -> Result<String, ValidationFailur
         });
     }
     if matches!(kind, BinaryKind::Ffmpeg) {
-        let filters = Command::new(path)
-            .args(["-filters"])
-            .output()
-            .map_err(|error| ValidationFailure {
-                status: "execution blocked",
-                detail: format!("could not inspect FFmpeg filters: {error}"),
-            })?;
+        let filters = run_command(path, &["-filters"]).map_err(|failure| ValidationFailure {
+            status: failure.status,
+            detail: format!("could not inspect FFmpeg filters: {}", failure.detail),
+        })?;
         let filter_text = format!(
             "{}\n{}",
             String::from_utf8_lossy(&filters.stdout),
@@ -507,7 +726,7 @@ fn run_version(path: &Path, kind: BinaryKind) -> Result<String, ValidationFailur
 
 #[cfg(test)]
 mod tests {
-    use super::is_development_wrapper;
+    use super::{candidate_paths_from_roots, is_development_wrapper};
     use std::path::PathBuf;
 
     fn temporary_path(name: &str) -> PathBuf {
@@ -528,5 +747,43 @@ mod tests {
         std::fs::write(&path, b"\xCF\xFA\xED\xFE\x00\x00\x00\x02").unwrap();
         assert!(!is_development_wrapper(&path));
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn installed_root_binaries_are_checked_before_legacy_resource_prefixes() {
+        let root = temporary_path("installed-root");
+        let binaries = root.join("binaries");
+        std::fs::create_dir_all(&binaries).unwrap();
+        let binary = binaries.join("ffmpeg.exe");
+        std::fs::write(&binary, b"MZ").unwrap();
+
+        // This is the v0.9.0 Windows failure: the resolver searched only below
+        // resources/, so the confirmed NSIS layout was invisible.
+        let legacy = candidate_paths_from_roots(vec![root.join("resources")], "ffmpeg.exe");
+        assert!(legacy.iter().all(|path| !path.exists()));
+
+        let fixed =
+            candidate_paths_from_roots(vec![root.clone(), root.join("resources")], "ffmpeg.exe");
+        assert_eq!(fixed.first(), Some(&binary));
+        assert!(fixed.first().is_some_and(|path| path.is_file()));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_bundled_names_never_fall_back_to_extensionless_wrappers() {
+        for kind in [
+            BinaryKind::Ffmpeg,
+            BinaryKind::Ffprobe,
+            BinaryKind::YtDlp,
+            BinaryKind::GalleryDl,
+            BinaryKind::BgutilPot,
+        ] {
+            assert!(kind
+                .bundled_names()
+                .iter()
+                .all(|name| name.ends_with(".exe")));
+        }
     }
 }

@@ -8,6 +8,8 @@ mod video;
 mod watermark;
 
 use rayon::prelude::*;
+use std::env;
+use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -524,6 +526,39 @@ async fn scan_dropped_paths(paths: Vec<String>) -> Vec<String> {
     image_paths
 }
 
+fn maybe_run_runtime_probe() {
+    if !env::args().any(|argument| argument == "--nd-runtime-inventory") {
+        return;
+    }
+
+    let Some(output_path) = env::var_os("ND_RUNTIME_PROBE_OUTPUT") else {
+        eprintln!("ND_RUNTIME_PROBE_OUTPUT is required with --nd-runtime-inventory");
+        std::process::exit(2);
+    };
+    let diagnostics = runtime::diagnostics();
+    let inventory = engine_update::inventory();
+    let all_bundled_ready = inventory.len() == 5
+        && inventory
+            .iter()
+            .all(|item| item.status == "available" && item.source == "bundled");
+    let payload = serde_json::json!({
+        "operatingSystem": env::consts::OS,
+        "architecture": env::consts::ARCH,
+        "executableDirectory": runtime::executable_directory(),
+        "resourceDirectory": runtime::resource_directory(),
+        "diagnostics": diagnostics,
+        "inventory": inventory,
+    });
+    let result = serde_json::to_vec_pretty(&payload)
+        .map_err(|error| error.to_string())
+        .and_then(|data| fs::write(&output_path, data).map_err(|error| error.to_string()));
+    if let Err(error) = result {
+        eprintln!("Could not write runtime probe: {error}");
+        std::process::exit(2);
+    }
+    std::process::exit(if all_bundled_ready { 0 } else { 1 });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -533,6 +568,7 @@ pub fn run() {
         .setup(|app| {
             runtime::initialize(&app.handle());
             let _ = engine_update::cleanup_staging();
+            maybe_run_runtime_probe();
             Ok(())
         })
         .manage(AppState {

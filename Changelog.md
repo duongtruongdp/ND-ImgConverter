@@ -8,6 +8,13 @@ All notable changes and feature releases for **ND Image Converter** are document
 - Added independent Stable/Beta application update channels with persisted preference, SemVer-aware release filtering, exact native installer selection, safe missing-asset fallback, and manual About → App Updates checks.
 - Kept v0.9.0 browser-assisted downloads and documented the separate Tauri updater signing/bootstrap requirements.
 
+## [Unreleased — M4.1-WIN-P0]
+
+### Fixed
+- Corrected packaged Windows media-engine discovery for the installed NSIS layout (`binaries/*.exe`).
+- Added installed-app inventory probing, candidate-path diagnostics, bounded engine health checks, and a native Windows regression gate.
+- Kept the existing v0.9.0 version, tag, and installers unchanged until Windows acceptance passes.
+
 ## [Unreleased — M3.6]
 
 ### Media Downloader

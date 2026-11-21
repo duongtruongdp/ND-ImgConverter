@@ -27,10 +27,10 @@ create or publish a GitHub Release.
 Windows CI uses the configured NSIS target and the approved runtime source
 records in `scripts/runtime-sources.json`. Native Windows CI installs the NSIS
 artifact into a disposable runner folder, verifies the installed
-`resources/binaries` layout, runs PE architecture and version checks, launches
-the installed executable, runs the media smoke test, and attempts silent
-uninstall. WebView2 is the only expected OS-level prerequisite unless the
-Tauri configuration changes.
+`binaries/*.exe` layout, runs PE architecture and version checks, launches the
+installed executable, invokes the installed app's own media-engine inventory,
+runs the media smoke test, and attempts silent uninstall. WebView2 is the only
+expected OS-level prerequisite unless the Tauri configuration changes.
 
 ## Trust boundaries
 

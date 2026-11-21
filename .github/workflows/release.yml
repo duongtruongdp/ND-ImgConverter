@@ -290,6 +290,34 @@ jobs:
           if ($null -eq $installedExe) { throw "Installed app executable is missing under: $installDir" }
           node scripts/verify-runtime-bundle.mjs $installDir --windows --require-downloader --require-gallery
           node scripts/smoke-test-packaged-runtime.mjs $installDir --windows
+
+          # Exercise the same runtime inventory used by the About → Media Engines
+          # panel, from the installed executable rather than from a standalone CLI.
+          $probePath = Join-Path $env:RUNNER_TEMP 'nd-runtime-inventory.json'
+          $env:ND_RUNTIME_PROBE_OUTPUT = $probePath
+          $probe = Start-Process -FilePath $installedExe.FullName -ArgumentList @('--nd-runtime-inventory') -Wait -PassThru
+          Remove-Item Env:ND_RUNTIME_PROBE_OUTPUT -ErrorAction SilentlyContinue
+          if (-not (Test-Path $probePath)) { throw 'Installed runtime inventory probe did not write a report.' }
+          $probeReport = Get-Content -Raw $probePath | ConvertFrom-Json
+          if ($probe.ExitCode -ne 0) {
+            throw "Installed runtime inventory probe failed with exit code $($probe.ExitCode): $(Get-Content -Raw $probePath)"
+          }
+          if ($probeReport.inventory.Count -ne 5) { throw "Expected five installed media engines, found $($probeReport.inventory.Count)." }
+          $installPrefix = ([System.IO.Path]::GetFullPath($installDir)).TrimEnd('\') + '\'
+          foreach ($engine in $probeReport.inventory) {
+            if ($engine.status -ne 'available') { throw "$($engine.key) is not available: $($engine.detail)" }
+            if ($engine.source -ne 'bundled') { throw "$($engine.key) did not resolve from the bundled runtime." }
+            if ([string]::IsNullOrWhiteSpace($engine.path)) { throw "$($engine.key) has no resolved executable path." }
+            $resolvedPath = [System.IO.Path]::GetFullPath($engine.path)
+            if (-not $resolvedPath.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "$($engine.key) resolved outside the installed app: $resolvedPath"
+            }
+            if ([System.IO.Path]::GetExtension($resolvedPath) -ne '.exe') {
+              throw "$($engine.key) did not resolve to a Windows .exe: $resolvedPath"
+            }
+          }
+          Write-Host "Installed runtime inventory passed: $($probeReport.resourceDirectory)"
+
           $process = Start-Process -FilePath $installedExe.FullName -PassThru
           Start-Sleep -Seconds 5
           if ($process.HasExited) { throw "Installed app exited during launch check with code $($process.ExitCode)." }
