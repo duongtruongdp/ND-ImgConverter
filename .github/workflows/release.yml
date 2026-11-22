@@ -304,12 +304,22 @@ jobs:
             throw "Installed runtime inventory probe failed with exit code $($probe.ExitCode): $(Get-Content -Raw $probePath)"
           }
           if ($probeReport.inventory.Count -ne 5) { throw "Expected five installed media engines, found $($probeReport.inventory.Count)." }
-          $installPrefix = ([System.IO.Path]::GetFullPath($installDir)).TrimEnd('\') + '\'
+          function Normalize-WindowsPath([string]$path) {
+            $fullPath = [System.IO.Path]::GetFullPath($path)
+            if ($fullPath.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+              return '\\' + $fullPath.Substring(8)
+            }
+            if ($fullPath.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase)) {
+              return $fullPath.Substring(4)
+            }
+            return $fullPath
+          }
+          $installPrefix = (Normalize-WindowsPath $installDir).TrimEnd('\') + '\'
           foreach ($engine in $probeReport.inventory) {
             if ($engine.status -ne 'available') { throw "$($engine.key) is not available: $($engine.detail)" }
             if ($engine.source -ne 'bundled') { throw "$($engine.key) did not resolve from the bundled runtime." }
             if ([string]::IsNullOrWhiteSpace($engine.path)) { throw "$($engine.key) has no resolved executable path." }
-            $resolvedPath = [System.IO.Path]::GetFullPath($engine.path)
+            $resolvedPath = Normalize-WindowsPath $engine.path
             if (-not $resolvedPath.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
               throw "$($engine.key) resolved outside the installed app: $resolvedPath"
             }
