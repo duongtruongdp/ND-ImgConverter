@@ -559,6 +559,35 @@ fn maybe_run_runtime_probe() {
     std::process::exit(if all_bundled_ready { 0 } else { 1 });
 }
 
+fn maybe_run_engine_update_probe() {
+    if !env::args().any(|argument| argument == "--nd-engine-update-check") {
+        return;
+    }
+
+    let Some(output_path) = env::var_os("ND_ENGINE_UPDATE_PROBE_OUTPUT") else {
+        eprintln!("ND_ENGINE_UPDATE_PROBE_OUTPUT is required with --nd-engine-update-check");
+        std::process::exit(2);
+    };
+    let result = tauri::async_runtime::block_on(engine_update::check_updates());
+    let payload = serde_json::json!({
+        "operatingSystem": env::consts::OS,
+        "architecture": env::consts::ARCH,
+        "result": result,
+    });
+    let write_result = serde_json::to_vec_pretty(&payload)
+        .map_err(|error| error.to_string())
+        .and_then(|data| fs::write(&output_path, data).map_err(|error| error.to_string()));
+    if let Err(error) = write_result {
+        eprintln!("Could not write engine update probe: {error}");
+        std::process::exit(2);
+    }
+    std::process::exit(if matches!(payload["result"]["state"].as_str(), Some("upToDate" | "updateAvailable")) {
+        0
+    } else {
+        1
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -568,6 +597,7 @@ pub fn run() {
         .setup(|app| {
             runtime::initialize(&app.handle());
             let _ = engine_update::cleanup_staging();
+            maybe_run_engine_update_probe();
             maybe_run_runtime_probe();
             Ok(())
         })

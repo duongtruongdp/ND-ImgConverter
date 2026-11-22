@@ -15,6 +15,9 @@ const MANIFEST_SCHEMA: u32 = 2;
 const STAGING_DIR: &str = "staging";
 const MIN_FREE_SPACE: u64 = 64 * 1024 * 1024;
 const CHECK_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
+const ED25519_SPKI_PREFIX: [u8; 12] = [
+    0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+];
 static UPDATE_LOCK: Mutex<()> = Mutex::new(());
 static DOWNLOAD_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 static DOWNLOAD_BUSY: AtomicBool = AtomicBool::new(false);
@@ -114,6 +117,18 @@ fn host_is_allowed(host: &str, allowed_hosts: &[String]) -> bool {
         .any(|allowed| allowed.eq_ignore_ascii_case(host))
 }
 
+fn is_trusted_github_asset_redirect(initial_host: &str, final_host: &str) -> bool {
+    let initial_is_github = matches!(
+        initial_host.to_ascii_lowercase().as_str(),
+        "github.com" | "www.github.com"
+    );
+    let final_is_github_asset = matches!(
+        final_host.to_ascii_lowercase().as_str(),
+        "release-assets.githubusercontent.com" | "objects.githubusercontent.com"
+    );
+    initial_is_github && final_is_github_asset
+}
+
 fn is_private_ip(host: &str) -> bool {
     let Ok(address) = host.parse::<std::net::IpAddr>() else {
         return false;
@@ -155,15 +170,16 @@ where
         .map_err(|error| format!("update URL is invalid: {error}"))?;
     let host = url
         .host_str()
-        .ok_or_else(|| "update URL has no host".to_string())?;
+        .ok_or_else(|| "update URL has no host".to_string())?
+        .to_string();
     let local_test = matches!(
         std::env::var("ND_ENGINE_UPDATE_TEST_LOCAL").as_deref(),
         Ok("1") | Ok("true")
     );
-    if !host_is_allowed(host, allowed_hosts) {
+    if !host_is_allowed(&host, allowed_hosts) {
         return Err("update host is not allowlisted by the trusted manifest".into());
     }
-    if !local_test && is_private_ip(host) {
+    if !local_test && is_private_ip(&host) {
         return Err("private or local update destinations are blocked".into());
     }
     let client = reqwest::Client::builder()
@@ -195,7 +211,9 @@ where
         .url()
         .host_str()
         .ok_or_else(|| "engine download has no final host".to_string())?;
-    if !host_is_allowed(final_host, allowed_hosts) {
+    if !host_is_allowed(final_host, allowed_hosts)
+        && !is_trusted_github_asset_redirect(&host, final_host)
+    {
         return Err("engine download redirected to an untrusted host".into());
     }
     let total = response
@@ -686,6 +704,25 @@ fn verify_manifest_signature(
         .map_err(|error| format!("publisher signature verification failed: {error}"))
 }
 
+fn decode_public_key(value: &str) -> Result<[u8; 32], String> {
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(value)
+        .map_err(|error| format!("publisher public key is not valid base64: {error}"))?;
+    if decoded.len() == 32 {
+        return decoded
+            .try_into()
+            .map_err(|_| "publisher public key must be 32 bytes".to_string());
+    }
+    if decoded.len() == ED25519_SPKI_PREFIX.len() + 32
+        && decoded[..ED25519_SPKI_PREFIX.len()] == ED25519_SPKI_PREFIX
+    {
+        return decoded[ED25519_SPKI_PREFIX.len()..]
+            .try_into()
+            .map_err(|_| "publisher public key has an invalid Ed25519 SPKI value".to_string());
+    }
+    Err("publisher public key must be a raw 32-byte key or an Ed25519 SPKI key".into())
+}
+
 fn verify_manifest(manifest: &EngineUpdateManifest) -> Result<(), String> {
     if !trusted_manifest_enabled() {
         return Err("verified engine updates are disabled by default".into());
@@ -711,9 +748,7 @@ fn verify_manifest(manifest: &EngineUpdateManifest) -> Result<(), String> {
         }) else {
         return Err("publisher public key is not configured".into());
     };
-    let public_key = base64::engine::general_purpose::STANDARD
-        .decode(public_key)
-        .map_err(|error| format!("publisher public key is not valid base64: {error}"))?;
+    let public_key = decode_public_key(&public_key)?;
     let expected_key_id = option_env!("ND_ENGINE_UPDATE_KEY_ID")
         .map(str::to_string)
         .or_else(|| {
@@ -1139,6 +1174,41 @@ mod tests {
         item.file_name = "yt-dlp".into();
         item.download_url = "file:///tmp/engine".into();
         assert!(validate_asset_shape(&item).is_err());
+    }
+
+    #[test]
+    fn allows_only_known_github_release_asset_redirects() {
+        assert!(is_trusted_github_asset_redirect(
+            "github.com",
+            "release-assets.githubusercontent.com"
+        ));
+        assert!(is_trusted_github_asset_redirect(
+            "www.github.com",
+            "objects.githubusercontent.com"
+        ));
+        assert!(!is_trusted_github_asset_redirect(
+            "github.com",
+            "raw.githubusercontent.com"
+        ));
+        assert!(!is_trusted_github_asset_redirect(
+            "example.com",
+            "release-assets.githubusercontent.com"
+        ));
+    }
+
+    #[test]
+    fn accepts_raw_and_standard_spki_public_keys_only() {
+        let raw = [7u8; 32];
+        let raw_encoded = base64::engine::general_purpose::STANDARD.encode(raw);
+        assert_eq!(decode_public_key(&raw_encoded).unwrap(), raw);
+
+        let mut spki = ED25519_SPKI_PREFIX.to_vec();
+        spki.extend(raw);
+        let spki_encoded = base64::engine::general_purpose::STANDARD.encode(spki);
+        assert_eq!(decode_public_key(&spki_encoded).unwrap(), raw);
+
+        let invalid = base64::engine::general_purpose::STANDARD.encode([1u8; 44]);
+        assert!(decode_public_key(&invalid).is_err());
     }
 
     #[test]

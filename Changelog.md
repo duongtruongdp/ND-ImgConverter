@@ -33,6 +33,7 @@ All notable changes and feature releases for **ND Image Converter** are document
 ### Engine Updates
 - Added compile-time staging/production trust configuration so release builds cannot silently replace their engine-update trust root or endpoint through runtime environment variables.
 - Preserved debug-only environment overrides for controlled local verification.
+- Added native hosted-feed probing and strict GitHub release redirect validation for staging acceptance.
 - Added public-feed integration documentation without changing the published v0.9.1 installers.
 
 ## [Unreleased — M4.1-WIN-P0]

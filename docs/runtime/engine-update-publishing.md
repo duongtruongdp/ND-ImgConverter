@@ -36,13 +36,18 @@ controlled local tests only. Never log the values or private key:
 ```text
 ND_ENGINE_UPDATE_BUILD_IDENTITY=production
 ND_ENGINE_UPDATE_ENABLE=1
-ND_ENGINE_UPDATE_PUBLIC_KEY=<base64 32-byte Ed25519 public key>
+ND_ENGINE_UPDATE_PUBLIC_KEY=<base64 raw 32-byte or standard Ed25519 SPKI public key>
 ND_ENGINE_UPDATE_KEY_ID=nd-media-prod-1
 ND_ENGINE_UPDATE_CHANNEL=production
 ND_ENGINE_UPDATE_HOST=updates.example.com
 ND_ENGINE_UPDATE_MANIFEST_URL=https://updates.example.com/manifests/0.9.0/production.json
 # Local controlled tests may use ND_ENGINE_UPDATE_MANIFEST instead of the URL.
 ```
+
+For the public GitHub staging feed, use the direct `raw.githubusercontent.com`
+URL rather than the GitHub HTML redirect URL. Signed GitHub release asset URLs
+are accepted only when their final HTTPS destination is one of the fixed GitHub
+asset hosts used by release downloads.
 
 To sign a prepared manifest locally with a test-only key, generate the key outside the repository, then run:
 
