@@ -599,6 +599,12 @@ fn maybe_run_engine_update_lifecycle_probe(app: &AppHandle) {
     };
     let engine = env::var("ND_ENGINE_UPDATE_PROBE_ENGINE").unwrap_or_else(|_| "yt-dlp".into());
     let result = tauri::async_runtime::block_on(async {
+        if matches!(
+            env::var("ND_ENGINE_UPDATE_SEED_BUNDLED").as_deref(),
+            Ok("1") | Ok("true")
+        ) {
+            engine_update::seed_bundled_baseline(&engine)?;
+        }
         let check = engine_update::check_updates().await;
         let asset = check
             .updates

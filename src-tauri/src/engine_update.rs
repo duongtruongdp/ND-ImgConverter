@@ -857,6 +857,68 @@ pub(crate) fn inventory() -> Vec<EngineStatus> {
         .collect()
 }
 
+/// Seed an isolated acceptance workspace with the currently bundled engine.
+///
+/// This is intentionally only used by the native lifecycle probe. Production
+/// update flows keep the bundled runtime as the fallback until a managed
+/// update is installed; the probe needs a managed baseline so it can prove
+/// that Restore Previous returns to the pre-update version.
+pub(crate) fn seed_bundled_baseline(engine: &str) -> Result<EngineStatus, String> {
+    let kind = kind_for_engine(engine).ok_or_else(|| format!("unsupported engine: {engine}"))?;
+    let bundled = runtime::diagnostics()
+        .into_iter()
+        .find(|item| item.key == engine)
+        .ok_or_else(|| format!("no runtime diagnostic exists for {engine}"))?;
+    if bundled.source != "bundled" {
+        return Err(format!(
+            "acceptance baseline for {engine} must come from the bundled runtime"
+        ));
+    }
+    let source = bundled
+        .path
+        .as_deref()
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("bundled {engine} has no executable path"))?;
+    let version = bundled
+        .version
+        .clone()
+        .ok_or_else(|| format!("bundled {engine} has no detected version"))?;
+    let file_name = source
+        .file_name()
+        .ok_or_else(|| format!("bundled {engine} has no executable name"))?
+        .to_string_lossy()
+        .into_owned();
+    let root = runtime::managed_root()
+        .ok_or_else(|| "managed media-engine directory is not initialized".to_string())?;
+    let target = root.join(engine).join(&version).join(&file_name);
+    fs::create_dir_all(target.parent().expect("version directory exists"))
+        .map_err(|error| error.to_string())?;
+    fs::copy(&source, &target).map_err(|error| error.to_string())?;
+    prepare_managed_executable(&target)?;
+
+    let mut active = load_active(&root);
+    active.active.insert(
+        engine.to_string(),
+        ActiveEngine {
+            version,
+            executable: format!(
+                "{engine}/{}/{file_name}",
+                bundled.version.as_deref().unwrap_or_default()
+            ),
+        },
+    );
+    active.previous.remove(engine);
+    active.schema_version = MANIFEST_SCHEMA;
+    active.updated_at = Some(now_string());
+    write_atomic(&active_manifest_path(&root), &active)?;
+    runtime::invalidate_diagnostics_cache();
+
+    inventory()
+        .into_iter()
+        .find(|item| item.key == kind.key())
+        .ok_or_else(|| format!("seeded {engine} is not visible in inventory"))
+}
+
 pub(crate) async fn check_updates() -> UpdateCheckResult {
     let checked_at = Some(now_string());
     if !trusted_manifest_enabled() {

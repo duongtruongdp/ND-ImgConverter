@@ -238,6 +238,7 @@ jobs:
             export ND_ENGINE_UPDATE_PROBE_OUTPUT="$output"
             export ND_ENGINE_UPDATE_MEDIA_OUTPUT="$root/media"
             export ND_MEDIA_ENGINES_DIR="$root/engines"
+            export ND_ENGINE_UPDATE_SEED_BUNDLED=1
             if ! PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle; then
               echo "Hosted lifecycle report for $engine:"
               cat "$output" || true
@@ -314,6 +315,7 @@ jobs:
             $env:ND_ENGINE_UPDATE_PROBE_OUTPUT = $probe
             $env:ND_ENGINE_UPDATE_MEDIA_OUTPUT = Join-Path $root 'media'
             $env:ND_MEDIA_ENGINES_DIR = Join-Path $root 'engines'
+            $env:ND_ENGINE_UPDATE_SEED_BUNDLED = '1'
             if ($engine -eq 'gallery-dl') {
               $env:ND_ENGINE_UPDATE_GALLERY_URL = 'https://www.python.org/static/community_logos/python-logo.png'
               Remove-Item Env:ND_ENGINE_UPDATE_MEDIA_URL -ErrorAction SilentlyContinue
