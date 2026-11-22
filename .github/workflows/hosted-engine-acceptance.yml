@@ -241,19 +241,20 @@ jobs:
             export ND_ENGINE_UPDATE_SEED_BUNDLED=1
             stdout_log="$root/probe.stdout.log"
             stderr_log="$root/probe.stderr.log"
-            set +e
-            PATH=/usr/bin:/bin:/usr/sbin:/sbin open -W -n "$app_path" --args \
-              --nd-engine-update-lifecycle \
-              --nd-engine-update-probe-engine "$engine" \
-              --nd-engine-update-probe-output "$output" \
-              --nd-engine-update-media-output "$root/media" \
-              --nd-media-engines-dir "$root/engines" \
-              --nd-engine-update-seed-bundled 1 \
-              --nd-engine-update-media-url "${ND_ENGINE_UPDATE_MEDIA_URL:-}" \
-              --nd-engine-update-gallery-url "${ND_ENGINE_UPDATE_GALLERY_URL:-}" \
-              >"$stdout_log" 2>"$stderr_log"
-            probe_exit=$?
-            set -e
+            if PATH=/usr/bin:/bin:/usr/sbin:/sbin open -W -n "$app_path" --args \
+                --nd-engine-update-lifecycle \
+                --nd-engine-update-probe-engine "$engine" \
+                --nd-engine-update-probe-output "$output" \
+                --nd-engine-update-media-output "$root/media" \
+                --nd-media-engines-dir "$root/engines" \
+                --nd-engine-update-seed-bundled 1 \
+                --nd-engine-update-media-url "${ND_ENGINE_UPDATE_MEDIA_URL:-}" \
+                --nd-engine-update-gallery-url "${ND_ENGINE_UPDATE_GALLERY_URL:-}" \
+                >"$stdout_log" 2>"$stderr_log"; then
+              probe_exit=0
+            else
+              probe_exit=$?
+            fi
             echo "Native lifecycle exit code for $engine: $probe_exit"
             if [ "$probe_exit" -ne 0 ] || [ ! -s "$output" ]; then
               echo "Hosted lifecycle report for $engine:"
