@@ -238,7 +238,11 @@ jobs:
             export ND_ENGINE_UPDATE_PROBE_OUTPUT="$output"
             export ND_ENGINE_UPDATE_MEDIA_OUTPUT="$root/media"
             export ND_MEDIA_ENGINES_DIR="$root/engines"
-            PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle
+            if ! PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle; then
+              echo "Hosted lifecycle report for $engine:"
+              cat "$output" || true
+              exit 1
+            fi
             node - "$output" "$engine" <<'NODE'
             const fs = require('node:fs');
             const [file, engine] = process.argv.slice(2);
@@ -283,12 +287,23 @@ jobs:
           if ($inventory.ExitCode -ne 0) { throw "Installed inventory failed: $(Get-Content -Raw $inventoryPath)" }
           $inventoryReport = Get-Content -Raw $inventoryPath | ConvertFrom-Json
           if ($inventoryReport.inventory.Count -ne 5) { throw 'Installed inventory did not contain five engines.' }
+          function Normalize-WindowsPath([string]$path) {
+            $slash = [char]92
+            $fullPath = [IO.Path]::GetFullPath($path)
+            if ($fullPath.StartsWith($slash + $slash + '?' + $slash + 'UNC' + $slash, [StringComparison]::OrdinalIgnoreCase)) {
+              return $slash + $slash + $fullPath.Substring(8)
+            }
+            if ($fullPath.StartsWith($slash + $slash + '?' + $slash, [StringComparison]::OrdinalIgnoreCase)) {
+              return $fullPath.Substring(4)
+            }
+            return $fullPath
+          }
+          $installPrefix = (Normalize-WindowsPath $installDir).TrimEnd([char]92) + [char]92
           foreach ($engine in $inventoryReport.inventory) {
             if ($engine.status -ne 'available' -or $engine.source -ne 'bundled') { throw "$($engine.key) is not bundled/available." }
             if ([IO.Path]::GetExtension($engine.path) -ne '.exe') { throw "$($engine.key) did not resolve to .exe: $($engine.path)" }
-            $normalized = [IO.Path]::GetFullPath($engine.path)
-            $prefix = [IO.Path]::GetFullPath($installDir).TrimEnd('') + ''
-            if (-not $normalized.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw "$($engine.key) resolved outside install: $normalized" }
+            $normalized = Normalize-WindowsPath $engine.path
+            if (-not $normalized.StartsWith($installPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "$($engine.key) resolved outside install: $normalized" }
           }
 
           foreach ($engine in @('yt-dlp','gallery-dl')) {
