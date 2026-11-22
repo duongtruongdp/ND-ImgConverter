@@ -11,6 +11,7 @@ const source = process.env.ND_GALLERY_DL_SOURCE_DIR;
 const python = process.env.ND_PYTHON || 'python3';
 const outputRoot = resolve(process.env.ND_RUNTIME_OUTPUT || 'src-tauri/binaries');
 const dependencyLock = process.env.ND_GALLERY_DEPENDENCY_LOCK || 'scripts/gallery-runtime/requirements-macos.lock';
+const expectedVersion = process.env.ND_GALLERY_DL_EXPECTED_VERSION || '1.32.19';
 if (!target || !['aarch64-apple-darwin', 'x86_64-apple-darwin'].includes(target)) {
   throw new Error('ND_RUNTIME_TARGET must be a macOS arm64 or x86_64 target.');
 }
@@ -27,7 +28,7 @@ const run = (args, options = {}) => {
 };
 
 const version = run(['-c', 'import sys; sys.path.insert(0, sys.argv[1]); import gallery_dl; print(getattr(gallery_dl, "__version__", "unknown"))', source]).stdout.trim();
-if (version !== '1.32.19') throw new Error(`Expected gallery-dl 1.32.19, found ${version}.`);
+if (version !== expectedVersion) throw new Error(`Expected gallery-dl ${expectedVersion}, found ${version}.`);
 const pythonVersion = run(['--version']).stdout.trim();
 const pyinstallerVersion = run(['-m', 'PyInstaller', '--version']).stdout.trim();
 const commit = spawnSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
@@ -79,7 +80,7 @@ mkdirSync(outputRoot, { recursive: true });
 copyFileSync(built, outputPath);
 chmodSync(outputPath, 0o755);
 const health = spawnSync(outputPath, ['--version'], { encoding: 'utf8' });
-if (health.status !== 0 || !health.stdout.includes('1.32.19')) throw new Error('The packaged gallery-dl failed its version check.');
+if (health.status !== 0 || !health.stdout.includes(expectedVersion)) throw new Error('The packaged gallery-dl failed its version check.');
 
 const artifactSha256 = createHash('sha256').update(readFileSync(outputPath)).digest('hex');
 writeFileSync(join(outputRoot, 'gallery-dl-build.json'), `${JSON.stringify({

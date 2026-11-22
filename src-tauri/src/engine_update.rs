@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 const MANIFEST_SCHEMA: u32 = 2;
 const STAGING_DIR: &str = "staging";
@@ -820,6 +822,22 @@ fn available_space(path: &Path) -> Option<u64> {
     }
 }
 
+fn prepare_managed_executable(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(path)
+            .map_err(|error| error.to_string())?
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).map_err(|error| error.to_string())?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
 pub(crate) fn inventory() -> Vec<EngineStatus> {
     let previous = runtime::managed_root()
         .map(|root| load_active(&root).previous)
@@ -1019,6 +1037,7 @@ pub(crate) fn install_from_staging(request: InstallRequest) -> Result<EngineStat
     fs::create_dir_all(&version_dir).map_err(|error| error.to_string())?;
     let target = version_dir.join(&request.asset.file_name);
     fs::rename(&staged_copy, &target).map_err(|error| error.to_string())?;
+    prepare_managed_executable(&target)?;
     if let Some(kind) = kind_for_engine(&request.asset.engine) {
         runtime::health_check(&target, kind)?;
     }

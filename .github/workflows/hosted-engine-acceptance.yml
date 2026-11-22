@@ -1,0 +1,326 @@
+name: Hosted Engine Native Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ND_ENGINE_UPDATE_BUILD_IDENTITY: staging
+  ND_ENGINE_UPDATE_ENABLE: "1"
+  ND_ENGINE_UPDATE_CHANNEL: staging
+  ND_ENGINE_UPDATE_KEY_ID: nd-media-staging-1
+  ND_ENGINE_UPDATE_PUBLIC_KEY: MCowBQYDK2VwAyEAs+nnfd69K7lsW9w3ZgYqr3kgH0IkV07wZ+tX57Y/EkU=
+  ND_ENGINE_UPDATE_HOST: raw.githubusercontent.com
+  ND_ENGINE_UPDATE_MANIFEST_URL: https://raw.githubusercontent.com/duongtruongdp/ND-ImgConverter-Engine-Feed/refs/heads/main/manifests/staging/manifest.json
+
+jobs:
+  native-acceptance:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            tauri_args: --target aarch64-apple-darwin --bundles app
+          - platform: macos-15-intel
+            target: x86_64-apple-darwin
+            tauri_args: --target x86_64-apple-darwin --bundles app
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            tauri_args: --target x86_64-pc-windows-msvc --bundles nsis
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup pinned Python for macOS gallery build
+        if: startsWith(matrix.platform, 'macos')
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.15'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Prepare approved runtime binaries
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: node scripts/prepare-release-runtime.mjs
+
+      - name: Verify runtime source approvals
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: node scripts/verify-release-sources.mjs
+
+      - name: Build pinned gallery-dl runtime on macOS
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          gallery_dir="$RUNNER_TEMP/nd-gallery-dl-${{ matrix.target }}"
+          mkdir -p "$gallery_dir"
+          gallery_url="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sourceArchiveUrl")"
+          gallery_sha="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sourceArchiveSha256")"
+          gallery_commit="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sourceCommit")"
+          archive="$gallery_dir/gallery_dl-1.32.19.tar.gz"
+          curl -L --fail --retry 3 -o "$archive" "$gallery_url"
+          echo "$gallery_sha  $archive" | shasum -a 256 -c -
+          tar -xzf "$archive" -C "$gallery_dir"
+          python3 -m venv "$gallery_dir/venv"
+          "$gallery_dir/venv/bin/python" -m pip install --require-hashes -r scripts/gallery-runtime/requirements-macos.lock
+          ND_RUNTIME_TARGET="${{ matrix.target }}" \
+          ND_GALLERY_DL_SOURCE_DIR="$gallery_dir/gallery_dl-1.32.19" \
+          ND_GALLERY_DL_SOURCE_COMMIT="$gallery_commit" \
+          ND_GALLERY_DL_SOURCE_ARCHIVE_SHA256="$gallery_sha" \
+          ND_GALLERY_DL_SOURCE_ARCHIVE_URL="$gallery_url" \
+          ND_GALLERY_DEPENDENCY_LOCK="scripts/gallery-runtime/requirements-macos.lock" \
+          ND_PYTHON="$gallery_dir/venv/bin/python" \
+          ND_GALLERY_BUILD_ROOT="$gallery_dir/pyinstaller-build" \
+          ND_RUNTIME_OUTPUT="src-tauri/binaries" \
+          node scripts/build-gallery-runtime.mjs
+
+      - name: Bundle yt-dlp downloader
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/binaries
+          ytdlp_version="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].ytDlp.version")"
+          ytdlp_url="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].ytDlp.url")"
+          ytdlp_sha="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].ytDlp.sha256")"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ytdlp_bin=src-tauri/binaries/yt-dlp.exe
+          else
+            ytdlp_bin=src-tauri/binaries/yt-dlp
+          fi
+          curl -L --fail --retry 3 -o "$ytdlp_bin" "$ytdlp_url"
+          if [ "${{ runner.os }}" != "Windows" ]; then chmod +x "$ytdlp_bin"; fi
+          node scripts/verify-runtime-file.mjs "$ytdlp_bin" "$ytdlp_sha" "$ytdlp_version" --version
+
+      - name: Bundle YouTube PO Token provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          bgutil_version="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPot.version")"
+          bgutil_url="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPot.url")"
+          bgutil_sha="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPot.sha256")"
+          plugin_url="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPotPlugin.url")"
+          plugin_sha="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].bgutilPotPlugin.sha256")"
+          mkdir -p src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/bgutil-ytdlp-pot-provider.zip" "$plugin_url"
+          node scripts/verify-runtime-file.mjs "$RUNNER_TEMP/bgutil-ytdlp-pot-provider.zip" "$plugin_sha"
+          unzip -q "$RUNNER_TEMP/bgutil-ytdlp-pot-provider.zip" -d src-tauri/binaries/yt-dlp-plugins/bgutil-ytdlp-pot-provider
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bgutil_bin=src-tauri/binaries/bgutil-pot.exe
+          else
+            bgutil_bin=src-tauri/binaries/bgutil-pot
+          fi
+          curl -L --fail --retry 3 -o "$bgutil_bin" "$bgutil_url"
+          if [ "${{ runner.os }}" != "Windows" ]; then chmod +x "$bgutil_bin"; fi
+          node scripts/verify-runtime-file.mjs "$bgutil_bin" "$bgutil_sha" "$bgutil_version" --version
+
+      - name: Bundle approved gallery-dl runtime
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            gallery_bin=src-tauri/binaries/gallery-dl.exe
+            gallery_url="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.url")"
+            gallery_sha="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.sha256")"
+            gallery_version="$(node -p "require('./scripts/runtime-sources.json').targets['${{ matrix.target }}'].galleryDl.version")"
+            curl -L --fail --retry 3 -o "$gallery_bin" "$gallery_url"
+            node scripts/verify-runtime-file.mjs "$gallery_bin" "$gallery_sha" "$gallery_version" --version
+          else
+            gallery_bin=src-tauri/binaries/gallery-dl
+            chmod +x "$gallery_bin"
+            gallery_sha="$(node -p "require('./src-tauri/binaries/gallery-dl-build.json').artifactSha256")"
+            gallery_version="$(node -p "require('./src-tauri/binaries/gallery-dl-build.json').sourceVersion")"
+            node scripts/verify-runtime-file.mjs "$gallery_bin" "$gallery_sha" "$gallery_version" --version
+          fi
+
+      - name: Add downloader resources
+        shell: bash
+        env:
+          ND_RUNTIME_TARGET: ${{ matrix.target }}
+        run: node scripts/configure-runtime-resources.mjs
+
+      - name: Bundle macOS FFmpeg dependencies
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/binaries/lib
+          for binary in src-tauri/binaries/ffmpeg src-tauri/binaries/ffprobe; do
+            while read -r dependency; do
+              library="$(printf '%s\n' "$dependency" | awk '{print $1}')"
+              case "$library" in
+                /opt/homebrew/*|/usr/local/*)
+                  destination="src-tauri/binaries/lib/$(basename "$library")"
+                  if [ ! -f "$destination" ]; then cp "$library" "$destination"; chmod +x "$destination"; install_name_tool -id "@loader_path/$(basename "$destination")" "$destination" || true; fi
+                  install_name_tool -change "$library" "@loader_path/lib/$(basename "$destination")" "$binary" || true
+                  ;;
+              esac
+            done < <(otool -L "$binary" | tail -n +2)
+          done
+          for pass in 1 2 3 4 5; do
+            for library in src-tauri/binaries/lib/*.dylib; do
+              [ -f "$library" ] || continue
+              while read -r dependency; do
+                dependency_path="$(printf '%s\n' "$dependency" | awk '{print $1}')"
+                case "$dependency_path" in
+                  /opt/homebrew/*|/usr/local/*)
+                    dependency_name="$(basename "$dependency_path")"
+                    destination="src-tauri/binaries/lib/$dependency_name"
+                    if [ ! -f "$destination" ]; then cp "$dependency_path" "$destination"; chmod +x "$destination"; install_name_tool -id "@loader_path/$dependency_name" "$destination" || true; fi
+                    install_name_tool -change "$dependency_path" "@loader_path/$dependency_name" "$library" || true
+                    ;;
+                esac
+              done < <(otool -L "$library" | tail -n +2)
+            done
+          done
+          for library in src-tauri/binaries/lib/*.dylib; do [ -f "$library" ] && codesign --force --sign - --timestamp=none "$library"; done
+          codesign --force --sign - --timestamp=none src-tauri/binaries/ffmpeg
+          codesign --force --sign - --timestamp=none src-tauri/binaries/ffprobe
+
+      - name: Write runtime manifest
+        shell: bash
+        run: node scripts/write-runtime-manifest.mjs src-tauri/binaries
+
+      - name: Add runtime manifest resource
+        shell: bash
+        run: node -e "const fs=require('fs'); const file='src-tauri/tauri.conf.json'; const config=JSON.parse(fs.readFileSync(file,'utf8')); const item='binaries/runtime-manifest.json'; config.bundle.resources=[...(config.bundle.resources||[]),...(!config.bundle.resources?.includes(item)&&fs.existsSync(item)?[item]:[])]; fs.writeFileSync(file, JSON.stringify(config,null,2)+'\\n');"
+
+      - name: Build staging-enabled native app
+        env:
+          LCMS2_STATIC: '1'
+        run: npm run tauri build -- ${{ matrix.tauri_args }}
+
+      - name: Run hosted lifecycle on native macOS app
+        if: startsWith(matrix.platform, 'macos')
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app_path"
+          app_bin="$app_path/Contents/MacOS/ND Image Converter"
+          test -x "$app_bin"
+          for engine in yt-dlp gallery-dl; do
+            root="$RUNNER_TEMP/nd-hosted-lifecycle-${{ matrix.target }}-$engine"
+            output="$root/probe.json"
+            mkdir -p "$root/media"
+            if [ "$engine" = "gallery-dl" ]; then
+              export ND_ENGINE_UPDATE_GALLERY_URL=https://www.python.org/static/community_logos/python-logo.png
+              unset ND_ENGINE_UPDATE_MEDIA_URL
+            else
+              export ND_ENGINE_UPDATE_MEDIA_URL=https://filesamples.com/samples/video/mp4/sample_640x360.mp4
+              unset ND_ENGINE_UPDATE_GALLERY_URL
+            fi
+            export ND_ENGINE_UPDATE_PROBE_ENGINE="$engine"
+            export ND_ENGINE_UPDATE_PROBE_OUTPUT="$output"
+            export ND_ENGINE_UPDATE_MEDIA_OUTPUT="$root/media"
+            export ND_MEDIA_ENGINES_DIR="$root/engines"
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle
+            node - "$output" "$engine" <<'NODE'
+            const fs = require('node:fs');
+            const [file, engine] = process.argv.slice(2);
+            const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (report.error) throw new Error(`${engine} lifecycle failed: ${report.error}`);
+            if (report.check?.state !== 'updateAvailable' || report.check?.manifestRevision !== 3) throw new Error(`${engine} did not accept revision 3`);
+            if (report.activated?.source !== 'managed' || report.rolledBack?.rollbackAvailable === false) throw new Error(`${engine} activation/rollback state invalid`);
+            if (String(report.mediaBeforeRollback).startsWith('not-run:') || String(report.mediaAfterRollback).startsWith('not-run:')) throw new Error(`${engine} media operation was not run`);
+            console.log(JSON.stringify({engine, revision: report.check.manifestRevision, activated: report.activated.version, rolledBack: report.rolledBack.version, mediaBeforeRollback: report.mediaBeforeRollback, mediaAfterRollback: report.mediaAfterRollback}));
+            NODE
+          done
+
+          app_log="$RUNNER_TEMP/nd-hosted-app-launch.log"
+          "$app_bin" >"$app_log" 2>&1 &
+          app_pid=$!
+          sleep 5
+          kill -0 "$app_pid"
+          kill "$app_pid" || true
+
+      - name: Install and run hosted lifecycle on Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installer = Get-ChildItem (Join-Path $bundleRoot 'bundle/nsis/*.exe') | Select-Object -First 1
+          if ($null -eq $installer) { throw 'NSIS installer was not produced.' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'nd-hosted-engine-installed'
+          if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS silent install failed: $($install.ExitCode)" }
+          $installedExe = Get-ChildItem -Path $installDir -Recurse -File -Filter '*.exe' |
+            Where-Object { $_.Name -notin @('uninstall.exe','ffmpeg.exe','ffprobe.exe','yt-dlp.exe','gallery-dl.exe','bgutil-pot.exe') } |
+            Sort-Object FullName | Select-Object -First 1
+          if ($null -eq $installedExe) { throw "Installed app executable missing under $installDir" }
+          node scripts/verify-runtime-bundle.mjs $installDir --windows --require-downloader --require-gallery
+          node scripts/smoke-test-packaged-runtime.mjs $installDir --windows
+
+          $inventoryPath = Join-Path $env:RUNNER_TEMP 'nd-hosted-inventory.json'
+          $env:ND_RUNTIME_PROBE_OUTPUT = $inventoryPath
+          $inventory = Start-Process -FilePath $installedExe.FullName -ArgumentList @('--nd-runtime-inventory') -Wait -PassThru
+          if ($inventory.ExitCode -ne 0) { throw "Installed inventory failed: $(Get-Content -Raw $inventoryPath)" }
+          $inventoryReport = Get-Content -Raw $inventoryPath | ConvertFrom-Json
+          if ($inventoryReport.inventory.Count -ne 5) { throw 'Installed inventory did not contain five engines.' }
+          foreach ($engine in $inventoryReport.inventory) {
+            if ($engine.status -ne 'available' -or $engine.source -ne 'bundled') { throw "$($engine.key) is not bundled/available." }
+            if ([IO.Path]::GetExtension($engine.path) -ne '.exe') { throw "$($engine.key) did not resolve to .exe: $($engine.path)" }
+            $normalized = [IO.Path]::GetFullPath($engine.path)
+            $prefix = [IO.Path]::GetFullPath($installDir).TrimEnd('') + ''
+            if (-not $normalized.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw "$($engine.key) resolved outside install: $normalized" }
+          }
+
+          foreach ($engine in @('yt-dlp','gallery-dl')) {
+            $root = Join-Path $env:RUNNER_TEMP "nd-hosted-lifecycle-$engine"
+            New-Item -ItemType Directory -Force -Path (Join-Path $root 'media') | Out-Null
+            $probe = Join-Path $root 'probe.json'
+            $env:ND_ENGINE_UPDATE_PROBE_ENGINE = $engine
+            $env:ND_ENGINE_UPDATE_PROBE_OUTPUT = $probe
+            $env:ND_ENGINE_UPDATE_MEDIA_OUTPUT = Join-Path $root 'media'
+            $env:ND_MEDIA_ENGINES_DIR = Join-Path $root 'engines'
+            if ($engine -eq 'gallery-dl') {
+              $env:ND_ENGINE_UPDATE_GALLERY_URL = 'https://www.python.org/static/community_logos/python-logo.png'
+              Remove-Item Env:ND_ENGINE_UPDATE_MEDIA_URL -ErrorAction SilentlyContinue
+            } else {
+              $env:ND_ENGINE_UPDATE_MEDIA_URL = 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4'
+              Remove-Item Env:ND_ENGINE_UPDATE_GALLERY_URL -ErrorAction SilentlyContinue
+            }
+            $run = Start-Process -FilePath $installedExe.FullName -ArgumentList @('--nd-engine-update-lifecycle') -Wait -PassThru
+            if ($run.ExitCode -ne 0) { throw "$engine lifecycle failed: $(Get-Content -Raw $probe)" }
+            $report = Get-Content -Raw $probe | ConvertFrom-Json
+            if ($null -ne $report.error) { throw "$engine lifecycle error: $($report.error)" }
+            if ($report.check.state -ne 'updateAvailable' -or $report.check.manifestRevision -ne 3) { throw "$engine did not accept revision 3" }
+            if ($report.activated.source -ne 'managed' -or $report.mediaBeforeRollback.StartsWith('not-run:') -or $report.mediaAfterRollback.StartsWith('not-run:')) { throw "$engine activation/rollback/media acceptance failed" }
+            Write-Host (ConvertTo-Json @{ engine=$engine; revision=$report.check.manifestRevision; activated=$report.activated.version; rolledBack=$report.rolledBack.version; mediaBeforeRollback=$report.mediaBeforeRollback; mediaAfterRollback=$report.mediaAfterRollback })
+          }
+
+          $process = Start-Process -FilePath $installedExe.FullName -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) { throw "Installed app exited during launch check: $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
+          $uninstaller = Join-Path $installDir 'uninstall.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'NSIS uninstaller is missing.' }
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Silent uninstall failed: $($uninstall.ExitCode)" }
+          if (Test-Path $installDir) { throw 'Installed application directory remains after uninstall.' }

@@ -588,6 +588,115 @@ fn maybe_run_engine_update_probe() {
     });
 }
 
+fn maybe_run_engine_update_lifecycle_probe(app: &AppHandle) {
+    if !env::args().any(|argument| argument == "--nd-engine-update-lifecycle") {
+        return;
+    }
+
+    let Some(output_path) = env::var_os("ND_ENGINE_UPDATE_PROBE_OUTPUT") else {
+        eprintln!("ND_ENGINE_UPDATE_PROBE_OUTPUT is required with --nd-engine-update-lifecycle");
+        std::process::exit(2);
+    };
+    let engine = env::var("ND_ENGINE_UPDATE_PROBE_ENGINE").unwrap_or_else(|_| "yt-dlp".into());
+    let result = tauri::async_runtime::block_on(async {
+        let check = engine_update::check_updates().await;
+        let asset = check
+            .updates
+            .iter()
+            .find(|candidate| candidate.engine == engine)
+            .cloned()
+            .ok_or_else(|| format!("no hosted update was offered for {engine}"))?;
+        let cancel = AtomicBool::new(false);
+        let staged_path = engine_update::download_verified_asset(&asset, &cancel, |_, _| {})
+            .await?;
+        let activated = engine_update::install_from_staging(engine_update::InstallRequest {
+            asset: asset.clone(),
+            staged_path,
+            active_jobs: 0,
+        })?;
+        let media_before_rollback = run_engine_update_media_probe(app, &engine, "after-update")?;
+        let rolled_back = engine_update::rollback(&engine)?;
+        let media_after_rollback = run_engine_update_media_probe(app, &engine, "after-rollback")?;
+        Ok::<_, String>((check, asset, activated, rolled_back, media_before_rollback, media_after_rollback))
+    });
+    let payload = match result {
+        Ok((check, asset, activated, rolled_back, media_before_rollback, media_after_rollback)) => serde_json::json!({
+            "operatingSystem": env::consts::OS,
+            "architecture": env::consts::ARCH,
+            "check": check,
+            "asset": asset,
+            "activated": activated,
+            "rolledBack": rolled_back,
+            "mediaBeforeRollback": media_before_rollback,
+            "mediaAfterRollback": media_after_rollback,
+        }),
+        Err(error) => serde_json::json!({
+            "operatingSystem": env::consts::OS,
+            "architecture": env::consts::ARCH,
+            "error": error,
+        }),
+    };
+    let write_result = serde_json::to_vec_pretty(&payload)
+        .map_err(|error| error.to_string())
+        .and_then(|data| fs::write(&output_path, data).map_err(|error| error.to_string()));
+    if let Err(error) = write_result {
+        eprintln!("Could not write engine update lifecycle probe: {error}");
+        std::process::exit(2);
+    }
+    std::process::exit(if payload.get("error").is_none() { 0 } else { 1 });
+}
+
+fn run_engine_update_media_probe(app: &AppHandle, engine: &str, phase: &str) -> Result<String, String> {
+    let variable = if engine == "gallery-dl" {
+        "ND_ENGINE_UPDATE_GALLERY_URL"
+    } else {
+        "ND_ENGINE_UPDATE_MEDIA_URL"
+    };
+    let Ok(url) = env::var(variable) else {
+        return Ok(format!("not-run: {variable} was not provided"));
+    };
+    let root = runtime::managed_root().ok_or_else(|| "managed runtime root is unavailable".to_string())?;
+    let output_directory = env::var_os("ND_ENGINE_UPDATE_MEDIA_OUTPUT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join("media-probe"))
+        .join(phase);
+    fs::create_dir_all(&output_directory).map_err(|error| error.to_string())?;
+    let job_id = format!("engine-update-e2e-{engine}-{phase}");
+    download::begin(&job_id);
+    let result = if engine == "gallery-dl" {
+        download::download_gallery(
+            app.clone(),
+            download::GalleryDownloadRequest {
+                url,
+                auth_browser: None,
+                output_directory: Some(output_directory.to_string_lossy().into_owned()),
+                selected_indices: None,
+            },
+            &job_id,
+        )
+    } else {
+        download::download(
+            app.clone(),
+            download::DownloadRequest {
+                url,
+                format_id: "best".into(),
+                audio_available: false,
+                max_height: None,
+                container: Some("mp4".into()),
+                auth_browser: None,
+                output_directory: Some(output_directory.to_string_lossy().into_owned()),
+                playlist: false,
+                playlist_items: None,
+                audio_format: None,
+                connections: Some(1),
+            },
+            &job_id,
+        )
+    };
+    download::finish(&job_id);
+    result
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -597,6 +706,7 @@ pub fn run() {
         .setup(|app| {
             runtime::initialize(&app.handle());
             let _ = engine_update::cleanup_staging();
+            maybe_run_engine_update_lifecycle_probe(&app.handle());
             maybe_run_engine_update_probe();
             maybe_run_runtime_probe();
             Ok(())

@@ -36,6 +36,14 @@ All notable changes and feature releases for **ND Image Converter** are document
 - Added native hosted-feed probing and strict GitHub release redirect validation for staging acceptance.
 - Added public-feed integration documentation without changing the published v0.9.1 installers.
 
+## [Unreleased — M4.3B–D]
+
+### Engine Updates
+- Added a native hosted update lifecycle probe that exercises verified download, managed activation, real downloader/gallery media work, and explicit rollback.
+- Normalized Unix managed-engine permissions after activation so downloaded executables remain runnable.
+- Added a manual native acceptance workflow for macOS arm64, macOS Intel and Windows NSIS installation against the public staging feed.
+- Added a production trust bootstrap design without enabling production keys or changing the v0.9.1 application release.
+
 ## [Unreleased — M4.1-WIN-P0]
 
 ### Fixed
