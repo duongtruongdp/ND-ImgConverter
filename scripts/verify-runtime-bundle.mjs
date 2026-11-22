@@ -20,6 +20,9 @@ const tools = [
 
 const searchRoots = [
   root,
+  join(root, 'build'),
+  join(root, 'build', 'resources'),
+  join(root, 'build', 'Resources'),
   join(root, 'Contents', 'Resources'),
   join(root, 'resources'),
   join(root, 'Resources'),
