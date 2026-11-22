@@ -290,7 +290,7 @@ where
     if !trusted_manifest_enabled() {
         return Err("Verified engine updates are disabled until a trusted publisher key is configured.".into());
     }
-    let manifest = if let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") {
+    let manifest = if let Some(path) = local_manifest_path() {
         let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
         serde_json::from_slice(&data).map_err(|error| format!("the trusted update manifest is invalid: {error}"))?
     } else {
@@ -360,20 +360,44 @@ fn record_check(root: &Path, revision: u64) {
 }
 
 fn configured_manifest_url() -> Option<String> {
-    std::env::var("ND_ENGINE_UPDATE_MANIFEST_URL")
-        .ok()
+    option_env!("ND_ENGINE_UPDATE_MANIFEST_URL")
+        .map(str::to_string)
         .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            if cfg!(debug_assertions) {
+                std::env::var("ND_ENGINE_UPDATE_MANIFEST_URL")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            } else {
+                None
+            }
+        })
 }
 
 fn configured_manifest_host() -> Option<String> {
-    std::env::var("ND_ENGINE_UPDATE_HOST")
-        .ok()
+    option_env!("ND_ENGINE_UPDATE_HOST")
+        .map(str::to_string)
+        .or_else(|| {
+            if cfg!(debug_assertions) {
+                std::env::var("ND_ENGINE_UPDATE_HOST").ok()
+            } else {
+                None
+            }
+        })
         .map(|value| value.trim().to_ascii_lowercase())
         .filter(|value| !value.is_empty())
 }
 
+fn local_manifest_path() -> Option<std::ffi::OsString> {
+    if cfg!(debug_assertions) {
+        std::env::var_os("ND_ENGINE_UPDATE_MANIFEST")
+    } else {
+        None
+    }
+}
+
 async fn fetch_manifest_bytes() -> Result<Vec<u8>, String> {
-    if let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") {
+    if let Some(path) = local_manifest_path() {
         return fs::read(path).map_err(|error| format!("Couldn't read the update manifest: {error}"));
     }
     let url = configured_manifest_url().ok_or_else(|| "No update manifest is configured.".to_string())?;
@@ -567,23 +591,45 @@ fn asset_supported_by_app(asset: &EngineAsset) -> bool {
 }
 
 fn trusted_manifest_enabled() -> bool {
-    matches!(
-        std::env::var("ND_ENABLE_ENGINE_UPDATES").as_deref(),
-        Ok("1") | Ok("true") | Ok("yes")
+    if cfg!(debug_assertions) {
+        return matches!(
+            std::env::var("ND_ENABLE_ENGINE_UPDATES").as_deref(),
+            Ok("1") | Ok("true") | Ok("yes")
+        );
+    }
+    let identity_configured = matches!(
+        option_env!("ND_ENGINE_UPDATE_BUILD_IDENTITY"),
+        Some("staging") | Some("production")
+    );
+    identity_configured && matches!(
+        option_env!("ND_ENGINE_UPDATE_ENABLE"),
+        Some("1") | Some("true") | Some("yes")
     )
 }
 
 fn configured_channel() -> Option<String> {
-    std::env::var("ND_ENGINE_UPDATE_CHANNEL")
-        .ok()
-        .or_else(|| option_env!("ND_ENGINE_UPDATE_CHANNEL").map(str::to_string))
+    option_env!("ND_ENGINE_UPDATE_CHANNEL")
+        .map(str::to_string)
+        .or_else(|| {
+            if cfg!(debug_assertions) {
+                std::env::var("ND_ENGINE_UPDATE_CHANNEL").ok()
+            } else {
+                None
+            }
+        })
         .filter(|value| matches!(value.as_str(), "staging" | "production"))
 }
 
 fn is_revoked_key(key_id: &str) -> bool {
-    std::env::var("ND_ENGINE_UPDATE_REVOKED_KEY_IDS")
-        .ok()
-        .or_else(|| option_env!("ND_ENGINE_UPDATE_REVOKED_KEY_IDS").map(str::to_string))
+    option_env!("ND_ENGINE_UPDATE_REVOKED_KEY_IDS")
+        .map(str::to_string)
+        .or_else(|| {
+            if cfg!(debug_assertions) {
+                std::env::var("ND_ENGINE_UPDATE_REVOKED_KEY_IDS").ok()
+            } else {
+                None
+            }
+        })
         .map(|value| key_id_is_revoked(key_id, &value))
         .unwrap_or(false)
 }
@@ -654,17 +700,29 @@ fn verify_manifest(manifest: &EngineUpdateManifest) -> Result<(), String> {
         return Err("update manifest revision is missing".into());
     }
     validate_manifest_window(manifest.published_at, manifest.expires_at, now_seconds())?;
-    let Some(public_key) = std::env::var("ND_ENGINE_UPDATE_PUBLIC_KEY")
-        .ok()
-        .or_else(|| option_env!("ND_ENGINE_UPDATE_PUBLIC_KEY").map(str::to_string)) else {
+    let Some(public_key) = option_env!("ND_ENGINE_UPDATE_PUBLIC_KEY")
+        .map(str::to_string)
+        .or_else(|| {
+            if cfg!(debug_assertions) {
+                std::env::var("ND_ENGINE_UPDATE_PUBLIC_KEY").ok()
+            } else {
+                None
+            }
+        }) else {
         return Err("publisher public key is not configured".into());
     };
     let public_key = base64::engine::general_purpose::STANDARD
         .decode(public_key)
         .map_err(|error| format!("publisher public key is not valid base64: {error}"))?;
-    let expected_key_id = std::env::var("ND_ENGINE_UPDATE_KEY_ID")
-        .ok()
-        .or_else(|| option_env!("ND_ENGINE_UPDATE_KEY_ID").map(str::to_string))
+    let expected_key_id = option_env!("ND_ENGINE_UPDATE_KEY_ID")
+        .map(str::to_string)
+        .or_else(|| {
+            if cfg!(debug_assertions) {
+                std::env::var("ND_ENGINE_UPDATE_KEY_ID").ok()
+            } else {
+                None
+            }
+        })
         .ok_or_else(|| "publisher key id is not configured".to_string())?;
     if manifest
         .signature
@@ -684,7 +742,7 @@ fn verified_manifest_asset(asset: &EngineAsset) -> Result<(), String> {
     if !trusted_manifest_enabled() {
         return Err("verified engine updates are disabled by default".into());
     }
-    let manifest = if let Some(path) = std::env::var_os("ND_ENGINE_UPDATE_MANIFEST") {
+    let manifest = if let Some(path) = local_manifest_path() {
         let data = fs::read(path).map_err(|error| format!("couldn't read the trusted update manifest: {error}"))?;
         serde_json::from_slice(&data).map_err(|error| format!("the trusted update manifest is invalid: {error}"))?
     } else {
@@ -759,7 +817,7 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
             updates: Vec::new(),
         };
     }
-    if std::env::var_os("ND_ENGINE_UPDATE_MANIFEST").is_none() && configured_manifest_url().is_none() {
+    if local_manifest_path().is_none() && configured_manifest_url().is_none() {
         return UpdateCheckResult {
             state: "notConfigured".into(),
             checked_at,

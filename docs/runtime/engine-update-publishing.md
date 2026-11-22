@@ -27,10 +27,15 @@ Missing or invalid configuration fails closed. The production app must not embed
 
 ## Controlled configuration
 
-Production configuration is intentionally not committed. The release build that should trust a publisher must receive the public key and stable key ID from protected CI/build configuration (they are embedded through compile-time environment values); the manifest location remains runtime configuration. Never log the values or private key:
+Production and staging release builds receive the enable flag, public key, key
+ID, channel, manifest URL and allowlisted host from protected compile-time
+configuration. A release build does not accept runtime environment overrides
+for its trust root or endpoint. Debug builds may use the runtime variables for
+controlled local tests only. Never log the values or private key:
 
 ```text
-ND_ENABLE_ENGINE_UPDATES=1
+ND_ENGINE_UPDATE_BUILD_IDENTITY=production
+ND_ENGINE_UPDATE_ENABLE=1
 ND_ENGINE_UPDATE_PUBLIC_KEY=<base64 32-byte Ed25519 public key>
 ND_ENGINE_UPDATE_KEY_ID=nd-media-prod-1
 ND_ENGINE_UPDATE_CHANNEL=production

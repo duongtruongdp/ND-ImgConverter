@@ -28,6 +28,13 @@ All notable changes and feature releases for **ND Image Converter** are document
 - Removed the duplicate inventory refresh from the About → Media Engines Check action so update checks do not repeat binary health checks unnecessarily.
 - Production engine updates remain fail-closed until an owner-authorized trusted publisher key and HTTPS feed are configured in a future client build.
 
+## [Unreleased — M4.3A]
+
+### Engine Updates
+- Added compile-time staging/production trust configuration so release builds cannot silently replace their engine-update trust root or endpoint through runtime environment variables.
+- Preserved debug-only environment overrides for controlled local verification.
+- Added public-feed integration documentation without changing the published v0.9.1 installers.
+
 ## [Unreleased — M4.1-WIN-P0]
 
 ### Fixed
