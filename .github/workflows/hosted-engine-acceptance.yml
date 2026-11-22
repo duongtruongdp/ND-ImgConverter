@@ -239,9 +239,20 @@ jobs:
             export ND_ENGINE_UPDATE_MEDIA_OUTPUT="$root/media"
             export ND_MEDIA_ENGINES_DIR="$root/engines"
             export ND_ENGINE_UPDATE_SEED_BUNDLED=1
-            if ! PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle; then
+            stdout_log="$root/probe.stdout.log"
+            stderr_log="$root/probe.stderr.log"
+            set +e
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle >"$stdout_log" 2>"$stderr_log"
+            probe_exit=$?
+            set -e
+            echo "Native lifecycle exit code for $engine: $probe_exit"
+            if [ "$probe_exit" -ne 0 ] || [ ! -s "$output" ]; then
               echo "Hosted lifecycle report for $engine:"
               cat "$output" || true
+              echo "Native lifecycle stdout for $engine:"
+              cat "$stdout_log" || true
+              echo "Native lifecycle stderr for $engine:"
+              cat "$stderr_log" || true
               exit 1
             fi
             node - "$output" "$engine" <<'NODE'
