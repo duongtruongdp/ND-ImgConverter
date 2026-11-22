@@ -2,6 +2,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    let args = std::env::args().collect::<Vec<_>>();
+    let mappings = [
+        ("--nd-engine-update-probe-engine", "ND_ENGINE_UPDATE_PROBE_ENGINE"),
+        ("--nd-engine-update-probe-output", "ND_ENGINE_UPDATE_PROBE_OUTPUT"),
+        ("--nd-engine-update-media-output", "ND_ENGINE_UPDATE_MEDIA_OUTPUT"),
+        ("--nd-media-engines-dir", "ND_MEDIA_ENGINES_DIR"),
+        ("--nd-engine-update-media-url", "ND_ENGINE_UPDATE_MEDIA_URL"),
+        ("--nd-engine-update-gallery-url", "ND_ENGINE_UPDATE_GALLERY_URL"),
+        ("--nd-engine-update-seed-bundled", "ND_ENGINE_UPDATE_SEED_BUNDLED"),
+        ("--nd-runtime-probe-output", "ND_RUNTIME_PROBE_OUTPUT"),
+    ];
+    for (flag, variable) in mappings {
+        if let Some(value) = args
+            .windows(2)
+            .find(|pair| pair[0] == flag)
+            .map(|pair| pair[1].clone())
+        {
+            std::env::set_var(variable, value);
+        }
+    }
     nd_image_converter_lib::run()
 }
 use serde::{Deserialize, Serialize};

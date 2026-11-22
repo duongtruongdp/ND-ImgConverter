@@ -242,7 +242,16 @@ jobs:
             stdout_log="$root/probe.stdout.log"
             stderr_log="$root/probe.stderr.log"
             set +e
-            PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" --nd-engine-update-lifecycle >"$stdout_log" 2>"$stderr_log"
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin open -W -n "$app_path" --args \
+              --nd-engine-update-lifecycle \
+              --nd-engine-update-probe-engine "$engine" \
+              --nd-engine-update-probe-output "$output" \
+              --nd-engine-update-media-output "$root/media" \
+              --nd-media-engines-dir "$root/engines" \
+              --nd-engine-update-seed-bundled 1 \
+              --nd-engine-update-media-url "${ND_ENGINE_UPDATE_MEDIA_URL:-}" \
+              --nd-engine-update-gallery-url "${ND_ENGINE_UPDATE_GALLERY_URL:-}" \
+              >"$stdout_log" 2>"$stderr_log"
             probe_exit=$?
             set -e
             echo "Native lifecycle exit code for $engine: $probe_exit"
