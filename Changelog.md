@@ -2,6 +2,18 @@
 
 All notable changes and feature releases for **ND Image Converter** are documented in this file.
 
+## [v0.9.1] - 2026-11-22
+
+### Fixed
+- Fixed bundled Media Engine detection on installed Windows systems.
+- Corrected Windows executable resolution for FFmpeg, FFprobe, yt-dlp, gallery-dl and the PO-token provider.
+- Fixed runtime verification for Tauri's packaged Windows binary layout and extended-length filesystem paths.
+
+### Notes
+- Media Engines are included in the installers; no separate FFmpeg, yt-dlp or gallery-dl installation is required.
+- Existing Media Downloader, Video to GIF and conversion workflows are preserved.
+- macOS packages remain ad-hoc signed/not notarized and Windows Authenticode signing is not configured.
+
 ## [Unreleased — M4.0]
 
 ### App Updates

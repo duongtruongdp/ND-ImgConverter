@@ -11,11 +11,12 @@ if (!['aarch64-apple-darwin', 'x86_64-apple-darwin'].includes(target)) {
 }
 
 const root = resolve(process.cwd());
+const packageVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 const targetRoot = join(root, 'src-tauri', 'target', target, 'release', 'bundle');
 const app = join(targetRoot, 'macos', 'ND Image Converter.app');
 const dmgScript = join(targetRoot, 'dmg', 'bundle_dmg.sh');
 const suffix = target.startsWith('aarch64') ? 'aarch64' : 'x64';
-const output = resolve(process.env.ND_DMG_OUTPUT || join(targetRoot, 'dmg', `ND Image Converter_0.9.0_${suffix}.dmg`));
+const output = resolve(process.env.ND_DMG_OUTPUT || join(targetRoot, 'dmg', `ND Image Converter_${packageVersion}_${suffix}.dmg`));
 const background = join(root, 'src-tauri', 'icons', 'dmg-background.png');
 
 for (const [label, path] of [['app', app], ['bundle_dmg.sh', dmgScript], ['DMG background', background]]) {

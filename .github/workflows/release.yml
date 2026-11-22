@@ -9,11 +9,11 @@ on:
       artifact_label:
         description: "Internal artifact label"
         required: true
-        default: "v0.9.0-rc"
+        default: "v0.9.1-rc"
       release_tag:
         description: "Exact tag to publish when the explicit publish gate is enabled"
         required: true
-        default: "v0.9.0"
+        default: "v0.9.1"
       publish_release:
         description: "Create a GitHub pre-release after all native jobs pass"
         required: true
@@ -342,7 +342,7 @@ jobs:
       - name: Collect internal release artifacts
         shell: bash
         env:
-          ARTIFACT_LABEL: ${{ github.event.inputs.artifact_label || format('v0.9.0-{0}', github.sha) }}
+          ARTIFACT_LABEL: ${{ github.event.inputs.artifact_label || format('v0.9.1-{0}', github.sha) }}
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/nd-release-artifacts"
@@ -392,7 +392,7 @@ jobs:
           RELEASE_KIND: ${{ inputs.release_kind }}
         run: |
           set -euo pipefail
-          test "$RELEASE_TAG" = "v0.9.0"
+          test "$RELEASE_TAG" = "v0.9.1"
           test "$RELEASE_KIND" = "prerelease"
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "A GitHub Release already exists for $RELEASE_TAG; refusing to overwrite it." >&2
@@ -430,7 +430,7 @@ jobs:
           node scripts/write-sha256-sums.mjs "$output"
           cat "$output/SHA256SUMS.txt"
 
-      - name: Publish labeled v0.9.0 pre-release
+      - name: Publish labeled v0.9.1 pre-release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -438,7 +438,7 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "ND Image Converter v0.9.0" \
+            --title "ND Image Converter v0.9.1" \
             --prerelease \
-            --notes-file docs/release/v0.9.0.md \
+            --notes-file docs/release/v0.9.1.md \
             "$RUNNER_TEMP/nd-public-release-assets"/*

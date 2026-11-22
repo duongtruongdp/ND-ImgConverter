@@ -67,7 +67,7 @@ export default function App() {
   
   const [currentTab, setCurrentTab] = useState<'converter' | 'automation' | 'video' | 'video-converter' | 'grab-stills' | 'video-downloader'>('converter');
   const [isAboutOpen, setIsAboutOpen] = useState(false);
-  const [appVersion, setAppVersion] = useState('0.9.0');
+  const [appVersion, setAppVersion] = useState('0.9.1');
   const [aboutError, setAboutError] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
