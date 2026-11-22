@@ -241,7 +241,7 @@ jobs:
             export ND_ENGINE_UPDATE_SEED_BUNDLED=1
             stdout_log="$root/probe.stdout.log"
             stderr_log="$root/probe.stderr.log"
-            PATH=/usr/bin:/bin:/usr/sbin:/sbin nohup "$app_bin" \
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin "$app_bin" \
               --nd-engine-update-lifecycle \
               --nd-engine-update-probe-engine "$engine" \
               --nd-engine-update-probe-output "$output" \
@@ -251,11 +251,16 @@ jobs:
               --nd-engine-update-media-url "${ND_ENGINE_UPDATE_MEDIA_URL:-}" \
               --nd-engine-update-gallery-url "${ND_ENGINE_UPDATE_GALLERY_URL:-}" \
               >"$stdout_log" 2>"$stderr_log" 2>&1 < /dev/null &
-            probe_exit=0
+            probe_pid=$!
             for attempt in $(seq 1 120); do
               [ -s "$output" ] && break
               sleep 1
             done
+            if wait "$probe_pid"; then
+              probe_exit=0
+            else
+              probe_exit=$?
+            fi
             echo "Native lifecycle exit code for $engine: $probe_exit"
             if [ "$probe_exit" -ne 0 ] || [ ! -s "$output" ]; then
               echo "Hosted lifecycle report for $engine:"

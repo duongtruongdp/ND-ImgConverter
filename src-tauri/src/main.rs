@@ -22,6 +22,9 @@ fn main() {
             std::env::set_var(variable, value);
         }
     }
+    if args.iter().any(|argument| argument == "--nd-engine-update-lifecycle") {
+        std::process::exit(nd_image_converter_lib::run_headless_engine_update_lifecycle_probe());
+    }
     nd_image_converter_lib::run()
 }
 use serde::{Deserialize, Serialize};

@@ -588,15 +588,7 @@ fn maybe_run_engine_update_probe() {
     });
 }
 
-fn maybe_run_engine_update_lifecycle_probe(app: &AppHandle) {
-    if !env::args().any(|argument| argument == "--nd-engine-update-lifecycle") {
-        return;
-    }
-
-    let Some(output_path) = env::var_os("ND_ENGINE_UPDATE_PROBE_OUTPUT") else {
-        eprintln!("ND_ENGINE_UPDATE_PROBE_OUTPUT is required with --nd-engine-update-lifecycle");
-        std::process::exit(2);
-    };
+fn engine_update_lifecycle_payload(app: &AppHandle) -> serde_json::Value {
     let engine = env::var("ND_ENGINE_UPDATE_PROBE_ENGINE").unwrap_or_else(|_| "yt-dlp".into());
     let result = tauri::async_runtime::block_on(async {
         if matches!(
@@ -625,7 +617,7 @@ fn maybe_run_engine_update_lifecycle_probe(app: &AppHandle) {
         let media_after_rollback = run_engine_update_media_probe(app, &engine, "after-rollback")?;
         Ok::<_, String>((check, asset, activated, rolled_back, media_before_rollback, media_after_rollback))
     });
-    let payload = match result {
+    match result {
         Ok((check, asset, activated, rolled_back, media_before_rollback, media_after_rollback)) => serde_json::json!({
             "operatingSystem": env::consts::OS,
             "architecture": env::consts::ARCH,
@@ -641,15 +633,55 @@ fn maybe_run_engine_update_lifecycle_probe(app: &AppHandle) {
             "architecture": env::consts::ARCH,
             "error": error,
         }),
-    };
-    let write_result = serde_json::to_vec_pretty(&payload)
-        .map_err(|error| error.to_string())
-        .and_then(|data| fs::write(&output_path, data).map_err(|error| error.to_string()));
-    if let Err(error) = write_result {
+    }
+}
+
+fn write_engine_update_lifecycle_payload(payload: &serde_json::Value) -> Result<(), String> {
+    let output_path = env::var_os("ND_ENGINE_UPDATE_PROBE_OUTPUT")
+        .ok_or_else(|| "ND_ENGINE_UPDATE_PROBE_OUTPUT is required with --nd-engine-update-lifecycle".to_string())?;
+    let data = serde_json::to_vec_pretty(payload).map_err(|error| error.to_string())?;
+    fs::write(output_path, data).map_err(|error| error.to_string())
+}
+
+fn maybe_run_engine_update_lifecycle_probe(app: &AppHandle) {
+    if !env::args().any(|argument| argument == "--nd-engine-update-lifecycle") {
+        return;
+    }
+
+    let payload = engine_update_lifecycle_payload(app);
+    if let Err(error) = write_engine_update_lifecycle_payload(&payload) {
         eprintln!("Could not write engine update lifecycle probe: {error}");
         std::process::exit(2);
     }
     std::process::exit(if payload.get("error").is_none() { 0 } else { 1 });
+}
+
+/// Run the packaged lifecycle probe without entering the GUI event loop.
+/// Native acceptance uses this path on headless macOS runners; production
+/// application startup remains unchanged.
+pub fn run_headless_engine_update_lifecycle_probe() -> i32 {
+    if !std::env::args().any(|argument| argument == "--nd-engine-update-lifecycle") {
+        return 2;
+    }
+    let app = match tauri::Builder::default().build(app_context()) {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("Could not build headless Tauri context: {error}");
+            return 2;
+        }
+    };
+    runtime::initialize(&app.handle());
+    let _ = engine_update::cleanup_staging();
+    let payload = engine_update_lifecycle_payload(&app.handle());
+    if let Err(error) = write_engine_update_lifecycle_payload(&payload) {
+        eprintln!("Could not write headless engine update lifecycle probe: {error}");
+        return 2;
+    }
+    if payload.get("error").is_none() { 0 } else { 1 }
+}
+
+fn app_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
 }
 
 fn run_engine_update_media_probe(app: &AppHandle, engine: &str, phase: &str) -> Result<String, String> {
@@ -755,6 +787,6 @@ pub fn run() {
             convert_videos,
             grab_video_still
         ])
-        .run(tauri::generate_context!())
+        .run(app_context())
         .expect("error while running tauri application");
 }
