@@ -219,10 +219,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          diagnostics_root="$RUNNER_TEMP/nd-hosted-lifecycle-${{ matrix.target }}-diagnostics"
+          mkdir -p "$diagnostics_root"
+          diagnostics_log="$diagnostics_root/preflight.log"
           app_path="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app_path"
-          app_bin="$app_path/Contents/MacOS/ND Image Converter"
+          app_bin="$(find "$app_path/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)"
           test -x "$app_bin"
+          {
+            echo "macOS version: $(sw_vers -productVersion)"
+            echo "runner architecture: $(uname -m)"
+            echo "target: ${{ matrix.target }}"
+            echo "bundle: $app_path"
+            echo "executable: $app_bin"
+            echo "bundle identifier: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist" 2>/dev/null || true)"
+            echo "executable architecture: $(file "$app_bin")"
+            echo "executable permissions: $(stat -f '%Sp %Su:%Sg' "$app_bin")"
+            echo "resource directory: $app_path/Contents/Resources"
+            echo "packaged runtime candidates:"
+            find "$app_path/Contents/Resources" -maxdepth 4 \( -name 'ffmpeg' -o -name 'ffprobe' -o -name 'yt-dlp' -o -name 'gallery-dl' -o -name 'bgutil-pot' -o -name 'runtime-manifest.json' -o -path '*yt-dlp-plugins*' \) -print 2>/dev/null | sort | head -80
+          } | tee "$diagnostics_log"
+          printf '%s\n' "$app_path" > "$diagnostics_root/bundle-path.txt"
+          printf '%s\n' "$app_bin" > "$diagnostics_root/executable-path.txt"
           for engine in yt-dlp gallery-dl; do
             root="$RUNNER_TEMP/nd-hosted-lifecycle-${{ matrix.target }}-$engine"
             output="$root/probe.json"
@@ -302,6 +320,18 @@ jobs:
             fi
             echo "Packaged macOS app completed a headless launch with exit code 0."
           fi
+
+      - name: Upload macOS lifecycle diagnostics
+        if: always() && startsWith(matrix.platform, 'macos')
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-lifecycle-diagnostics-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/nd-hosted-lifecycle-${{ matrix.target }}-diagnostics
+            ${{ runner.temp }}/nd-hosted-lifecycle-${{ matrix.target }}-yt-dlp
+            ${{ runner.temp }}/nd-hosted-lifecycle-${{ matrix.target }}-gallery-dl
+            ${{ runner.temp }}/nd-hosted-app-launch.log
+          if-no-files-found: warn
 
       - name: Install and run hosted lifecycle on Windows app
         if: runner.os == 'Windows'
