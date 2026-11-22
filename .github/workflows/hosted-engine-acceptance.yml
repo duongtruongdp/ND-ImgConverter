@@ -289,16 +289,16 @@ jobs:
               cat "$stderr_log" || true
               exit 1
             fi
-            node - "$output" "$engine" <<'NODE'
-            const fs = require('node:fs');
-            const [file, engine] = process.argv.slice(2);
-            const report = JSON.parse(fs.readFileSync(file, 'utf8'));
-            if (report.error) throw new Error(`${engine} lifecycle failed: ${report.error}`);
-            if (report.check?.state !== 'updateAvailable' || report.check?.manifestRevision !== 3) throw new Error(`${engine} did not accept revision 3`);
-            if (report.activated?.source !== 'managed' || report.rolledBack?.rollbackAvailable === false) throw new Error(`${engine} activation/rollback state invalid`);
-            if (String(report.mediaBeforeRollback).startsWith('not-run:') || String(report.mediaAfterRollback).startsWith('not-run:')) throw new Error(`${engine} media operation was not run`);
-            console.log(JSON.stringify({engine, revision: report.check.manifestRevision, activated: report.activated.version, rolledBack: report.rolledBack.version, mediaBeforeRollback: report.mediaBeforeRollback, mediaAfterRollback: report.mediaAfterRollback}));
-            NODE
+            node -e '
+              const fs = require("node:fs");
+              const [file, engine] = process.argv.slice(1);
+              const report = JSON.parse(fs.readFileSync(file, "utf8"));
+              if (report.error) throw new Error(`${engine} lifecycle failed: ${report.error}`);
+              if (report.check?.state !== "updateAvailable" || report.check?.manifestRevision !== 3) throw new Error(`${engine} did not accept revision 3`);
+              if (report.activated?.source !== "managed" || report.rolledBack?.rollbackAvailable === false) throw new Error(`${engine} activation/rollback state invalid`);
+              if (String(report.mediaBeforeRollback).startsWith("not-run:") || String(report.mediaAfterRollback).startsWith("not-run:")) throw new Error(`${engine} media operation was not run`);
+              console.log(JSON.stringify({engine, revision: report.check.manifestRevision, activated: report.activated.version, rolledBack: report.rolledBack.version, mediaBeforeRollback: report.mediaBeforeRollback, mediaAfterRollback: report.mediaAfterRollback}));
+            ' "$output" "$engine"
           done
 
           app_log="$RUNNER_TEMP/nd-hosted-app-launch.log"
