@@ -287,8 +287,21 @@ jobs:
           "$app_bin" >"$app_log" 2>&1 &
           app_pid=$!
           sleep 5
-          kill -0 "$app_pid"
-          kill "$app_pid" || true
+          if kill -0 "$app_pid" 2>/dev/null; then
+            echo "Packaged macOS app remained running after launch."
+            kill "$app_pid" || true
+          else
+            set +e
+            wait "$app_pid"
+            launch_exit=$?
+            set -e
+            if [ "$launch_exit" -ne 0 ]; then
+              echo "Packaged macOS app exited during headless launch with code $launch_exit."
+              cat "$app_log" || true
+              exit 1
+            fi
+            echo "Packaged macOS app completed a headless launch with exit code 0."
+          fi
 
       - name: Install and run hosted lifecycle on Windows app
         if: runner.os == 'Windows'
