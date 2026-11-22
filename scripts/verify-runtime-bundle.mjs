@@ -23,13 +23,24 @@ const searchRoots = [
   join(root, 'Contents', 'Resources'),
   join(root, 'resources'),
   join(root, 'Resources'),
+  join(root, 'bundle'),
+  join(root, 'bundle', 'resources'),
+  join(root, 'bundle', 'Resources'),
+  join(root, 'bundle', 'nsis'),
+  join(root, 'bundle', 'nsis', 'resources'),
 ];
+
+console.log(`Runtime bundle root: ${root}`);
+console.log(`Runtime search roots: ${searchRoots.join(', ')}`);
 
 const findTool = (name) => {
   for (const searchRoot of searchRoots) {
     for (const file of candidates(name)) {
       const path = join(searchRoot, 'binaries', file);
-      if (existsSync(path)) return path;
+      if (existsSync(path)) {
+        console.log(`Runtime candidate ${name}: ${path}`);
+        return path;
+      }
     }
   }
   return null;

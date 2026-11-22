@@ -251,6 +251,7 @@ jobs:
         shell: bash
         run: |
           BUNDLE_ROOT="src-tauri/target/${{ matrix.target }}/release"
+          node scripts/list-runtime-layout.mjs "$BUNDLE_ROOT" --windows
           if [ "${{ runner.os }}" = "macOS" ]; then
             APP_PATH="$(find "$BUNDLE_ROOT/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
             node scripts/verify-runtime-bundle.mjs "$APP_PATH" --require-downloader --require-gallery
