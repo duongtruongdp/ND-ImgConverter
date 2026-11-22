@@ -231,7 +231,7 @@ jobs:
               export ND_ENGINE_UPDATE_GALLERY_URL=https://www.python.org/static/community_logos/python-logo.png
               unset ND_ENGINE_UPDATE_MEDIA_URL
             else
-              export ND_ENGINE_UPDATE_MEDIA_URL=https://filesamples.com/samples/video/mp4/sample_640x360.mp4
+              export ND_ENGINE_UPDATE_MEDIA_URL=https://archive.org/download/ElephantsDream/ed_1024_512kb.mp4
               unset ND_ENGINE_UPDATE_GALLERY_URL
             fi
             export ND_ENGINE_UPDATE_PROBE_ENGINE="$engine"
@@ -241,20 +241,21 @@ jobs:
             export ND_ENGINE_UPDATE_SEED_BUNDLED=1
             stdout_log="$root/probe.stdout.log"
             stderr_log="$root/probe.stderr.log"
-            if PATH=/usr/bin:/bin:/usr/sbin:/sbin open -W -n "$app_path" --args \
-                --nd-engine-update-lifecycle \
-                --nd-engine-update-probe-engine "$engine" \
-                --nd-engine-update-probe-output "$output" \
-                --nd-engine-update-media-output "$root/media" \
-                --nd-media-engines-dir "$root/engines" \
-                --nd-engine-update-seed-bundled 1 \
-                --nd-engine-update-media-url "${ND_ENGINE_UPDATE_MEDIA_URL:-}" \
-                --nd-engine-update-gallery-url "${ND_ENGINE_UPDATE_GALLERY_URL:-}" \
-                >"$stdout_log" 2>"$stderr_log"; then
-              probe_exit=0
-            else
-              probe_exit=$?
-            fi
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin nohup "$app_bin" \
+              --nd-engine-update-lifecycle \
+              --nd-engine-update-probe-engine "$engine" \
+              --nd-engine-update-probe-output "$output" \
+              --nd-engine-update-media-output "$root/media" \
+              --nd-media-engines-dir "$root/engines" \
+              --nd-engine-update-seed-bundled 1 \
+              --nd-engine-update-media-url "${ND_ENGINE_UPDATE_MEDIA_URL:-}" \
+              --nd-engine-update-gallery-url "${ND_ENGINE_UPDATE_GALLERY_URL:-}" \
+              >"$stdout_log" 2>"$stderr_log" 2>&1 < /dev/null &
+            probe_exit=0
+            for attempt in $(seq 1 120); do
+              [ -s "$output" ] && break
+              sleep 1
+            done
             echo "Native lifecycle exit code for $engine: $probe_exit"
             if [ "$probe_exit" -ne 0 ] || [ ! -s "$output" ]; then
               echo "Hosted lifecycle report for $engine:"
@@ -303,6 +304,21 @@ jobs:
           node scripts/verify-runtime-bundle.mjs $installDir --windows --require-downloader --require-gallery
           node scripts/smoke-test-packaged-runtime.mjs $installDir --windows
 
+          Write-Host 'Installed runtime files (bounded listing):'
+          Get-ChildItem -Path $installDir -Recurse -File |
+            Where-Object { $_.Name -in @('ffmpeg.exe','ffprobe.exe','yt-dlp.exe','gallery-dl.exe','bgutil-pot.exe') -or $_.FullName -match 'yt-dlp-plugins' } |
+            Sort-Object FullName |
+            Select-Object -First 40 FullName,Length |
+            ForEach-Object { Write-Host ("{0} {1}" -f ($_.FullName.Substring($installDir.Length).TrimStart([char]92)), $_.Length) }
+          foreach ($required in @('ffmpeg.exe','ffprobe.exe','yt-dlp.exe','gallery-dl.exe','bgutil-pot.exe')) {
+            if (-not (Get-ChildItem -Path $installDir -Recurse -File -Filter $required | Select-Object -First 1)) {
+              throw "Installed runtime file missing: $required"
+            }
+          }
+          if (-not (Get-ChildItem -Path $installDir -Recurse -File | Where-Object { $_.FullName -match 'yt-dlp-plugins' } | Select-Object -First 1)) {
+            throw 'Installed yt-dlp plugin package is missing.'
+          }
+
           $inventoryPath = Join-Path $env:RUNNER_TEMP 'nd-hosted-inventory.json'
           $env:ND_RUNTIME_PROBE_OUTPUT = $inventoryPath
           $inventory = Start-Process -FilePath $installedExe.FullName -ArgumentList @('--nd-runtime-inventory') -Wait -PassThru
@@ -341,7 +357,7 @@ jobs:
               $env:ND_ENGINE_UPDATE_GALLERY_URL = 'https://www.python.org/static/community_logos/python-logo.png'
               Remove-Item Env:ND_ENGINE_UPDATE_MEDIA_URL -ErrorAction SilentlyContinue
             } else {
-              $env:ND_ENGINE_UPDATE_MEDIA_URL = 'https://filesamples.com/samples/video/mp4/sample_640x360.mp4'
+              $env:ND_ENGINE_UPDATE_MEDIA_URL = 'https://archive.org/download/ElephantsDream/ed_1024_512kb.mp4'
               Remove-Item Env:ND_ENGINE_UPDATE_GALLERY_URL -ErrorAction SilentlyContinue
             }
             $run = Start-Process -FilePath $installedExe.FullName -ArgumentList @('--nd-engine-update-lifecycle') -Wait -PassThru

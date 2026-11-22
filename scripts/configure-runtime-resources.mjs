@@ -7,7 +7,7 @@ const configPath = new URL('../src-tauri/tauri.conf.json', import.meta.url);
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
 const windows = target.includes('windows');
 const names = windows
-  ? ['ffmpeg.exe', 'ffprobe.exe', 'yt-dlp.exe', 'gallery-dl.exe', 'bgutil-pot.exe']
+  ? ['ffmpeg.exe', 'ffprobe.exe', 'yt-dlp.exe', 'gallery-dl.exe', 'bgutil-pot.exe', 'yt-dlp-plugins']
   : ['ffmpeg', 'ffprobe', 'yt-dlp', 'gallery-dl', 'bgutil-pot', 'yt-dlp-plugins', 'lib'];
 const resources = names
   .map((name) => `binaries/${name}`)
