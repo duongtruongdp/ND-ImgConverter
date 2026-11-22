@@ -4,6 +4,12 @@ import { listen } from '@tauri-apps/api/event';
 import { CheckCircle2, RefreshCw, RotateCcw, TriangleAlert } from 'lucide-react';
 import { useMediaDownloadStore } from '../../stores/mediaDownloadStore';
 
+import {
+  checkEngineUpdatesNow,
+  type EngineAsset,
+  type UpdateCheckResult,
+} from './engineUpdateService';
+
 type EngineStatus = {
   key: string;
   label: string;
@@ -13,29 +19,6 @@ type EngineStatus = {
   path?: string;
   rollbackAvailable: boolean;
   detail?: string;
-};
-
-type UpdateCheckResult = {
-  state: string;
-  checkedAt?: string;
-  message: string;
-  updates: EngineAsset[];
-};
-
-type EngineAsset = {
-  engine: string;
-  version: string;
-  channel: string;
-  platform: string;
-  architecture: string;
-  downloadUrl: string;
-  sha256: string;
-  sizeBytes: number;
-  publisher: string;
-  minAppVersion: string;
-  companions: string[];
-  license: string;
-  fileName: string;
 };
 
 const sourceLabel = (source: string) => source === 'bundled' ? 'Bundled' : source === 'managed' ? 'Managed' : source === 'explicit' ? 'Explicit' : source === 'system' ? 'System' : 'Unavailable';
@@ -50,6 +33,7 @@ export const MediaEngines = () => {
   const [updating, setUpdating] = useState<string | null>(null);
   const [updateProgress, setUpdateProgress] = useState<{ completed: number; total: number } | null>(null);
   const requestRef = useRef<Promise<void> | null>(null);
+  const checkRequestRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -84,24 +68,38 @@ export const MediaEngines = () => {
     return request;
   }, []);
 
+  useEffect(() => {
+    const refreshAfterUpdate = () => { void refresh(true); };
+    window.addEventListener('nd-engine-inventory-invalidated', refreshAfterUpdate);
+    return () => window.removeEventListener('nd-engine-inventory-invalidated', refreshAfterUpdate);
+  }, [refresh]);
+
   const checkForUpdates = async () => {
-    if (requestRef.current) return;
+    if (requestRef.current || checkRequestRef.current) return checkRequestRef.current;
+    performance.mark('nd-engine-check-click');
     setLoading(true);
     setError(null);
-    try {
-      const [nextCheck, nextItems] = await Promise.all([
-        invoke<UpdateCheckResult>('check_engine_updates'),
-        invoke<EngineStatus[]>('refresh_engine_inventory'),
-      ]);
-      if (!mountedRef.current) return;
-      setCheck(nextCheck);
-      setItems(nextItems);
-      setLoaded(true);
-    } catch (reason) {
-      if (mountedRef.current) setError(String(reason));
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+    const request = checkEngineUpdatesNow()
+      .then((nextCheck) => {
+        if (mountedRef.current) {
+          setCheck(nextCheck);
+          requestAnimationFrame(() => {
+            performance.mark('nd-engine-check-visible');
+            performance.measure('nd-engine-check-click-to-visible', 'nd-engine-check-click', 'nd-engine-check-visible');
+            const [measure] = performance.getEntriesByName('nd-engine-check-click-to-visible').slice(-1);
+            if (measure) console.debug(`[engine-update] click-to-visible: ${measure.duration.toFixed(1)}ms`);
+          });
+        }
+      })
+      .catch((reason) => {
+        if (mountedRef.current) setError(String(reason));
+      })
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+        checkRequestRef.current = null;
+      });
+    checkRequestRef.current = request;
+    return request;
   };
 
   const rollback = async (engine: string) => {
@@ -141,7 +139,7 @@ export const MediaEngines = () => {
   return <details className="mt-4 border-t border-zinc-800/80 pt-3" onToggle={(event) => { if (event.currentTarget.open && !loaded) void refresh(); }}>
     <summary className="cursor-pointer text-xs theme-text-secondary">Media Engines</summary>
     <div className="mt-2 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] theme-text-muted">{check?.state === 'disabled' || check?.state === 'offline' ? "Updates aren't configured yet." : 'Updates use a signed manifest.'}</p><button type="button" onClick={() => void checkForUpdates()} disabled={loading || Boolean(updating)} className="theme-surface-control flex h-8 items-center gap-1 rounded-lg border px-2 text-[11px]"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Check</button></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[11px] theme-text-muted">{check?.state === 'notConfigured' ? "Verified updates aren't configured yet." : 'Updates use a signed manifest.'}</p><button type="button" onClick={() => void checkForUpdates()} disabled={loading || Boolean(updating)} className="theme-surface-control flex h-8 items-center gap-1 rounded-lg border px-2 text-[11px]"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Check</button></div>
       {loading && <p className="text-[10px] theme-text-muted">Checking engines…</p>}
       {updating && <p className="text-[10px] text-blue-300">Updating {updating}… {updateProgress && updateProgress.total > 0 ? `${Math.round(updateProgress.completed / updateProgress.total * 100)}%` : 'preparing'}</p>}
       {error && <p className="text-[10px] theme-error">Couldn’t load media engines: {error}</p>}

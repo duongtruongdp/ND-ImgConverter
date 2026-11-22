@@ -39,6 +39,7 @@ import { GrabStillsTab } from './components/video/GrabStillsTab';
 import { VideoDownloaderTab } from './components/video/VideoDownloaderTab';
 import { RuntimeDiagnostics } from './components/settings/RuntimeDiagnostics';
 import { MediaEngines } from './components/settings/MediaEngines';
+import { EngineUpdateNotice } from './components/settings/EngineUpdateNotice';
 import { ImageItem, ResizeMode, SUPPORTED_INPUT_EXTENSIONS, ALL_OUTPUT_FORMATS } from './types/conversion';
 
 const REPOSITORY_URL = 'https://github.com/duongtruongdp/ND-ImgConverter';
@@ -692,6 +693,7 @@ export default function App() {
 
       {/* Auto-Update Notification Banner */}
       <UpdateChecker />
+      <EngineUpdateNotice />
 
       {isAboutOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-5" onMouseDown={() => setIsAboutOpen(false)}>

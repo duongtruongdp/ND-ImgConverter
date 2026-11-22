@@ -94,6 +94,8 @@ pub struct EngineStatus {
 pub struct UpdateCheckResult {
     pub state: String,
     pub checked_at: Option<String>,
+    pub manifest_revision: Option<u64>,
+    pub installed_versions: BTreeMap<String, String>,
     pub message: String,
     pub updates: Vec<EngineAsset>,
 }
@@ -748,17 +750,21 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
     let checked_at = Some(now_string());
     if !trusted_manifest_enabled() {
         return UpdateCheckResult {
-            state: "disabled".into(),
+            state: "notConfigured".into(),
             checked_at,
-            message: "Verified engine updates are off until a trusted publisher key is configured."
+            manifest_revision: None,
+            installed_versions: BTreeMap::new(),
+            message: "Verified engine updates are not configured yet."
                 .into(),
             updates: Vec::new(),
         };
     }
     if std::env::var_os("ND_ENGINE_UPDATE_MANIFEST").is_none() && configured_manifest_url().is_none() {
         return UpdateCheckResult {
-            state: "offline".into(),
+            state: "notConfigured".into(),
             checked_at,
+            manifest_revision: None,
+            installed_versions: BTreeMap::new(),
             message: "No update manifest is configured.".into(),
             updates: Vec::new(),
         };
@@ -768,6 +774,8 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
             return UpdateCheckResult {
                 state: "upToDate".into(),
                 checked_at: Some(last),
+                manifest_revision: accepted_revision(&root),
+                installed_versions: BTreeMap::new(),
                 message: "Checked recently. Nothing new to install.".into(),
                 updates: Vec::new(),
             };
@@ -779,6 +787,8 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
             return UpdateCheckResult {
                 state: "failed".into(),
                 checked_at,
+                manifest_revision: None,
+                installed_versions: BTreeMap::new(),
                 message: format!("Couldn't read the update manifest: {error}"),
                 updates: Vec::new(),
             }
@@ -790,6 +800,8 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
             return UpdateCheckResult {
                 state: "failed".into(),
                 checked_at,
+                manifest_revision: None,
+                installed_versions: BTreeMap::new(),
                 message: format!("The update manifest is invalid: {error}"),
                 updates: Vec::new(),
             }
@@ -799,6 +811,8 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
         return UpdateCheckResult {
             state: "failed".into(),
             checked_at,
+            manifest_revision: None,
+            installed_versions: BTreeMap::new(),
             message: error,
             updates: Vec::new(),
         };
@@ -810,6 +824,8 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
             return UpdateCheckResult {
                 state: "failed".into(),
                 checked_at,
+                manifest_revision: Some(manifest.manifest_revision),
+                installed_versions: BTreeMap::new(),
                 message: "The update manifest revision is older than the last accepted revision.".into(),
                 updates: Vec::new(),
             };
@@ -818,6 +834,8 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
             return UpdateCheckResult {
                 state: "failed".into(),
                 checked_at,
+                manifest_revision: Some(manifest.manifest_revision),
+                installed_versions: BTreeMap::new(),
                 message: format!("Couldn't cache the verified update manifest: {error}"),
                 updates: Vec::new(),
             };
@@ -849,6 +867,11 @@ pub(crate) async fn check_updates() -> UpdateCheckResult {
     UpdateCheckResult {
         state: if has_updates { "updateAvailable" } else { "upToDate" }.into(),
         checked_at,
+        manifest_revision: Some(manifest.manifest_revision),
+        installed_versions: installed
+            .into_iter()
+            .filter_map(|(key, version)| version.map(|value| (key, value)))
+            .collect(),
         message: if has_updates { "An engine update is ready." } else { "Everything is up to date." }.into(),
         updates,
     }

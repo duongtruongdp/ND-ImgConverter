@@ -13,6 +13,7 @@
     "test:media-downloader-ux": "node --experimental-strip-types --test scripts/test-media-downloader-ux.mjs",
     "test:engine-publisher": "node --test scripts/test-engine-publisher.mjs",
     "test:engine-manifest": "node --test scripts/test-engine-manifest.mjs",
+    "test:engine-update-service": "node --experimental-strip-types --test scripts/test-engine-update-service.mjs",
     "prepare:engine-manifest": "node scripts/prepare-engine-manifest.mjs",
     "test:media-fixtures": "node scripts/test-media-fixtures.mjs",
     "test:about-download-ux": "node --test scripts/test-about-download-ux.mjs",

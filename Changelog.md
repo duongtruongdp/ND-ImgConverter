@@ -20,6 +20,14 @@ All notable changes and feature releases for **ND Image Converter** are document
 - Added independent Stable/Beta application update channels with persisted preference, SemVer-aware release filtering, exact native installer selection, safe missing-asset fallback, and manual About → App Updates checks.
 - Kept v0.9.0 browser-assisted downloads and documented the separate Tauri updater signing/bootstrap requirements.
 
+## [Unreleased — M4.2]
+
+### Media Engines
+- Added a non-blocking startup engine-update check with a 24-hour interval, request deduplication, offline/backoff handling, and persisted dismissal state.
+- Added a small Light/Dark-compatible verified-update banner with one-click install and Later actions.
+- Removed the duplicate inventory refresh from the About → Media Engines Check action so update checks do not repeat binary health checks unnecessarily.
+- Production engine updates remain fail-closed until an owner-authorized trusted publisher key and HTTPS feed are configured in a future client build.
+
 ## [Unreleased — M4.1-WIN-P0]
 
 ### Fixed
