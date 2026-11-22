@@ -12,6 +12,9 @@ const app = resolve(rootArg || (isWindows
 const binaryName = (name) => isWindows ? `${name}.exe` : name;
 const resourceRoots = [
   app,
+  join(app, 'build'),
+  join(app, 'build', 'resources'),
+  join(app, 'build', 'Resources'),
   join(app, 'Contents', 'Resources'),
   join(app, 'resources'),
   join(app, 'Resources'),
